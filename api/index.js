@@ -1,3 +1,4 @@
+// Nugas.AI - force redeploy v2
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -14,7 +15,6 @@ const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
 // ====== DAFTAR MODEL ======
-// Cuma 2 model per provider — biar cepat pindah
 const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
@@ -80,7 +80,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-// ====== PROVIDER 1: GEMINI (timeout 12 detik) ======
+// ====== PROVIDER 1: GEMINI ======
 async function callGemini(prompt) {
   if (!GEMINI_KEY) throw new Error('NO_KEY');
   let lastError = '';
@@ -100,7 +100,7 @@ async function callGemini(prompt) {
             maxOutputTokens: 8192
           }
         })
-      }, 12000); // 12 detik
+      }, 12000);
 
       const rawText = await response.text();
       let data;
@@ -111,13 +111,13 @@ async function callGemini(prompt) {
         const errMsg = data.error?.message || `HTTP ${response.status}`;
         lastError = `${modelName}: ${errMsg}`;
         console.error(`[Gemini] ${response.status}: ${errMsg}`);
-        continue; // Langsung model berikutnya (tanpa retry)
+        continue;
       }
 
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) { lastError = `${modelName}: kosong`; continue; }
 
-      console.log(`[Gemini] ✅ Sukses: ${modelName}`);
+      console.log(`[Gemini] OK: ${modelName}`);
       return text;
 
     } catch (err) {
@@ -129,7 +129,7 @@ async function callGemini(prompt) {
   throw new Error(`Gemini gagal: ${lastError}`);
 }
 
-// ====== PROVIDER 2: GROQ (timeout 15 detik) ======
+// ====== PROVIDER 2: GROQ ======
 async function callGroq(prompt) {
   if (!GROQ_KEY) throw new Error('NO_KEY');
   let lastError = '';
@@ -153,7 +153,7 @@ async function callGroq(prompt) {
           response_format: { type: 'json_object' },
           max_tokens: 8000
         })
-      }, 15000); // 15 detik
+      }, 15000);
 
       const rawText = await response.text();
       let data;
@@ -170,7 +170,7 @@ async function callGroq(prompt) {
       const text = data.choices?.[0]?.message?.content;
       if (!text) { lastError = `${modelName}: kosong`; continue; }
 
-      console.log(`[Groq] ✅ Sukses: ${modelName}`);
+      console.log(`[Groq] OK: ${modelName}`);
       return text;
 
     } catch (err) {
@@ -200,10 +200,10 @@ async function callAIWithFallback(prompt) {
     try {
       console.log(`[Fallback] === Coba ${provider.name} ===`);
       const result = await provider.fn(prompt);
-      console.log(`[Fallback] ✅ ${provider.name} OK`);
+      console.log(`[Fallback] ${provider.name} OK`);
       return { text: result, provider: provider.name };
     } catch (err) {
-      console.warn(`[Fallback] ❌ ${provider.name}: ${err.message}`);
+      console.warn(`[Fallback] ${provider.name}: ${err.message}`);
       errors.push(`${provider.name}: ${err.message}`);
     }
   }
@@ -244,13 +244,21 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
   }
 });
 
+// ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', providers: { gemini: !!GEMINI_KEY, groq: !!GROQ_KEY } });
+  res.json({
+    status: 'ok',
+    version: 'v2',
+    providers: {
+      gemini: !!GEMINI_KEY,
+      groq: !!GROQ_KEY
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`✅ Server di http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`Server di http://localhost:${PORT}`));
 }
 
 module.exports = app;
