@@ -27,7 +27,6 @@ body {
   font-size: 13px;
 }
 
-/* Ikon Lucide default */
 i[data-lucide], svg.lucide {
   width: 16px;
   height: 16px;
@@ -155,13 +154,17 @@ i[data-lucide], svg.lucide {
   gap: 6px;
 }
 .section-title svg { width: 14px; height: 14px; }
+
+/* FILE ITEM + TOMBOL HAPUS */
 .file-item {
-  padding: 6px 12px 6px 24px;
+  padding: 6px 8px 6px 24px;
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
   font-size: 12px;
+  position: relative;
+  border-radius: 3px;
+  margin: 0 6px;
 }
 .file-item:hover { background: var(--hover); }
 .file-icon { color: var(--accent); }
@@ -170,6 +173,28 @@ i[data-lucide], svg.lucide {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.file-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  opacity: 0;
+  transition: 0.15s;
+  flex-shrink: 0;
+}
+.file-remove svg { width: 14px; height: 14px; }
+.file-item:hover .file-remove { opacity: 1; }
+.file-remove:hover {
+  background: rgba(244,135,113,0.15);
+  color: var(--red);
 }
 
 /* UPLOAD ZONE */
@@ -607,7 +632,6 @@ i[data-lucide], svg.lucide {
       "panel";
   }
 
-  /* Activity bar jadi drawer tersembunyi */
   .activitybar {
     position: fixed;
     left: 0;
@@ -620,7 +644,6 @@ i[data-lucide], svg.lucide {
   }
   .activitybar.open { transform: translateX(0); }
 
-  /* Sidebar jadi drawer */
   .sidebar {
     position: fixed;
     top: 32px;
@@ -635,7 +658,9 @@ i[data-lucide], svg.lucide {
   }
   .sidebar.open { transform: translateX(0); }
 
-  /* Panel collapsible */
+  /* Di mobile: tombol hapus selalu terlihat (tidak ada hover) */
+  .file-remove { opacity: 1; }
+
   .panel {
     max-height: 180px;
     transition: max-height 0.25s;
