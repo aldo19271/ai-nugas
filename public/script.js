@@ -239,14 +239,8 @@ function resetFileState(silent = false) {
     <p class="welcome-sub">Upload file materi / soal untuk memulai</p>
     <div class="welcome-steps">
       <div class="step"><span class="step-num">1</span> Upload file materi / soal</div>
-      <div class="step"><span class="step-num">2</span> Klik <b>Generate Soal</b></div>
-      <div class="step"><span class="step-num">3</span> Kerjakan kuis interaktif</div>
-    </div>
-    <div class="welcome-credit">
-      Dibuat oleh
-      <a href="https://www.instagram.com/apap09_" target="_blank" rel="noopener noreferrer">
-        <i data-lucide="instagram"></i> @apap09_
-      </a>
+      <div class="step"><span class="step-num">2</span> Klik <b>Generate kuis</b></div>
+      <div class="step"><span class="step-num">3</span> Kerjakan kuis</div>
     </div>
   </div>`;
 
@@ -327,7 +321,7 @@ async function handleFile(file) {
 
     btnGenerate.disabled = false;
     log(`File berhasil dibaca (${text.length} karakter).`, 'ok');
-    log('Klik "Generate Soal" untuk memulai.', 'dim');
+    log('Klik "Generate Kuis" untuk memulai.', 'dim');
     setStatus('File siap', 'green');
     refreshIcons();
 
@@ -399,7 +393,7 @@ btnGenerate.onclick = async () => {
     refreshIcons();
   } finally {
     btnGenerate.disabled = false;
-    btnGenerate.innerHTML = '<i data-lucide="play"></i> Generate Soal';
+    btnGenerate.innerHTML = '<i data-lucide="play"></i> Generate Kuis';
     refreshIcons();
   }
 };
