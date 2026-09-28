@@ -367,14 +367,12 @@ btnGenerate.onclick = async () => {
       body: JSON.stringify({ text: state.materiText, jumlahSoal })
     });
 
-    // Baca sebagai text dulu, biar tidak error kalau server balas HTML
     const rawText = await res.text();
 
     let json;
     try {
       json = JSON.parse(rawText);
     } catch (parseErr) {
-      // Response bukan JSON — biasanya timeout Vercel
       if (rawText.includes('An error') || rawText.includes('error occurred') || rawText.includes('FUNCTION_INVOCATION')) {
         throw new Error('Server timeout / overload. Tunggu 30 detik lalu coba lagi.');
       }
@@ -388,7 +386,8 @@ btnGenerate.onclick = async () => {
     state.currentIndex = 0;
     state.jawabanUser = [];
 
-    log(`AI selesai! Mode: ${json.data.mode}`, 'ok');
+    // Tampilkan provider yang dipakai
+    log(`AI selesai via ${json.provider || 'AI'}! Mode: ${json.data.mode}`, 'ok');
     log(`${json.data.soal.length} soal berhasil dibuat.`, 'ok');
 
     switchTab('kuis');
