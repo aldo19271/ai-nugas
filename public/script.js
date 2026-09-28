@@ -359,7 +359,7 @@ btnGenerate.onclick = async () => {
   btnGenerate.disabled = true;
   btnGenerate.innerHTML = '<span class="spinner"></span> Memproses...';
   setStatus('AI menganalisis...', 'yellow');
-  log('Mengirim ke Gemini AI...', 'warn');
+  log('Diproses ke AI...', 'warn');
 
   try {
     const res = await fetch('/api/generate', {
