@@ -119,10 +119,16 @@ function playConfettiSfx() {
   }
 }
 
-// Suara "hapus" (blip turun)
 function playRemoveSfx() {
   playTone(600, 0.08, 'sawtooth', 0.05, 0);
   playTone(400, 0.12, 'sawtooth', 0.05, 0.08);
+}
+
+// Suara khusus Instagram (nada ceria pendek)
+function playIgSfx() {
+  playTone(659.25, 0.1, 'sine', 0.08, 0);
+  playTone(880, 0.1, 'sine', 0.08, 0.09);
+  playTone(1174.66, 0.15, 'sine', 0.08, 0.18);
 }
 
 // ==================================================
@@ -200,7 +206,18 @@ function setStatus(text, color = 'green') {
 }
 
 // ==================================================
-// ====== RESET FILE (dipakai tombol hapus & upload baru) ======
+// ====== CREATOR (Instagram) ======
+// ==================================================
+const creatorCard = $('creatorCard');
+if (creatorCard) {
+  creatorCard.onclick = () => {
+    playIgSfx();
+    log('Membuka Instagram @apap09_ ...', 'ok');
+  };
+}
+
+// ==================================================
+// ====== RESET FILE ======
 // ==================================================
 function resetFileState(silent = false) {
   state.materiText = '';
@@ -216,7 +233,6 @@ function resetFileState(silent = false) {
   fileInput.value = '';
   statusSkor.textContent = 'Skor: -';
 
-  // Reset tampilan ke welcome screen
   viewKuis.innerHTML = `<div class="welcome">
     <i data-lucide="graduation-cap" class="welcome-logo"></i>
     <h1>BelajarAI</h1>
@@ -226,13 +242,17 @@ function resetFileState(silent = false) {
       <div class="step"><span class="step-num">2</span> Klik <b>Generate Soal</b></div>
       <div class="step"><span class="step-num">3</span> Kerjakan kuis interaktif</div>
     </div>
+    <div class="welcome-credit">
+      Dibuat oleh
+      <a href="https://www.instagram.com/apap09_" target="_blank" rel="noopener noreferrer">
+        <i data-lucide="instagram"></i> @apap09_
+      </a>
+    </div>
   </div>`;
 
   switchTab('kuis');
 
-  if (!silent) {
-    setStatus('File dihapus', 'yellow');
-  }
+  if (!silent) setStatus('File dihapus', 'yellow');
   refreshIcons();
 }
 
@@ -240,7 +260,7 @@ function resetFileState(silent = false) {
 // ====== TOMBOL HAPUS FILE ======
 // ==================================================
 fileRemove.onclick = (e) => {
-  e.stopPropagation();       // jangan trigger parent click
+  e.stopPropagation();
   e.preventDefault();
   playRemoveSfx();
   resetFileState();
@@ -285,7 +305,6 @@ async function handleFile(file) {
     return;
   }
 
-  // Reset dulu supaya bersih kalau sebelumnya sudah ada file
   resetFileState(true);
 
   log(`Membaca file: ${file.name}`, 'warn');
