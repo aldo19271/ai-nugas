@@ -11,10 +11,12 @@ app.use(express.json({ limit: '10mb' }));
 
 const API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
-// Daftar model yang dicoba berurutan (maks 2 biar cepat, tidak kena timeout Vercel)
+// Daftar model fallback — urutkan dari yang paling stabil
 const MODEL_FALLBACKS = [
   'gemini-flash-latest',
-  'gemini-flash-lite-latest'
+  'gemini-2.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash-lite'
 ];
 
 const buildPrompt = (materi, jumlahSoal) => `
@@ -66,8 +68,8 @@ ${materi}
 """
 `;
 
-// Fetch dengan timeout (biar tidak gantung kalau server lambat)
-async function fetchWithTimeout(url, options, timeoutMs = 8000) {
+// Fetch dengan timeout panjang (biar Gemini sempat balas)
+async function fetchWithTimeout(url, options, timeoutMs = 25000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -78,17 +80,16 @@ async function fetchWithTimeout(url, options, timeoutMs = 8000) {
   }
 }
 
-// Panggil Gemini dengan retry cepat (total maks ~8 detik)
+// Panggil Gemini dengan retry SABAR (delay 3 detik, 3 attempt per model)
 async function callGemini(prompt) {
   let lastError = '';
 
   for (const modelName of MODEL_FALLBACKS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
 
-    // Cuma 2 attempt per model, delay cuma 1 detik
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        console.log(`[Gemini] Coba: ${modelName} (attempt ${attempt})`);
+        console.log(`[Gemini] Coba: ${modelName} (attempt ${attempt}/3)`);
 
         const response = await fetchWithTimeout(url, {
           method: 'POST',
@@ -101,31 +102,32 @@ async function callGemini(prompt) {
               maxOutputTokens: 8192
             }
           })
-        }, 8000);
+        }, 25000);
 
-        // Baca response sebagai text dulu, baru parse JSON kalau memungkinkan
         const rawText = await response.text();
 
-        // Kalau response bukan JSON (kemungkinan Vercel/HTML error), tangani langsung
+        // Tangani response non-JSON
         let data;
         try {
           data = JSON.parse(rawText);
         } catch (parseErr) {
-          lastError = `Server balas format tidak dikenal: ${rawText.slice(0, 100)}`;
-          console.error(`[Gemini] Non-JSON response: ${rawText.slice(0, 200)}`);
+          lastError = `Server balas format tidak dikenal.`;
+          console.error(`[Gemini] Non-JSON: ${rawText.slice(0, 200)}`);
           break;
         }
 
         if (!response.ok) {
           const errMsg = data.error?.message || `HTTP ${response.status}`;
-          console.error(`[Gemini] Error: ${errMsg}`);
+          console.error(`[Gemini] Error ${response.status}: ${errMsg}`);
 
+          // 503 / 429 → server sibuk, tunggu 3 detik, retry
           if (response.status === 503 || response.status === 429) {
             lastError = `Server sibuk (${response.status}). Mencoba lagi...`;
-            if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+            if (attempt < 3) await new Promise(r => setTimeout(r, 3000));
             continue;
           }
 
+          // 404 → model tidak ada, coba model berikutnya
           if (response.status === 404) {
             lastError = `Model ${modelName} tidak tersedia.`;
             break;
@@ -137,18 +139,18 @@ async function callGemini(prompt) {
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error('Respons AI kosong.');
 
-        console.log(`[Gemini] Sukses: ${modelName}`);
+        console.log(`[Gemini] ✅ Sukses: ${modelName}`);
         return text;
 
       } catch (err) {
         lastError = err.message;
         console.error(`[Gemini] Exception: ${err.message}`);
-        if (attempt < 2) await new Promise(r => setTimeout(r, 500));
+        if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
       }
     }
   }
 
-  throw new Error(lastError || 'Semua model gagal. Coba lagi beberapa menit.');
+  throw new Error(lastError || 'Semua model sibuk. Tunggu 1-2 menit lalu coba lagi.');
 }
 
 // Endpoint generate
