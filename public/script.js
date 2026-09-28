@@ -238,7 +238,7 @@ function resetFileState(silent = false) {
     <h1>NugasAI</h1>
     <p class="welcome-sub">Upload file materi / soal untuk memulai</p>
     <div class="welcome-steps">
-      <div class="step"><span class="step-num">1</span> Upload file materi / soal</div>
+      <div class="step"><span class="step-num">1</span> Buka Garis 3 Sebelah Kiri Atas, Lalu Upload file materi / soal</div>
       <div class="step"><span class="step-num">2</span> Klik <b>Generate kuis</b></div>
       <div class="step"><span class="step-num">3</span> Kerjakan kuis</div>
     </div>
