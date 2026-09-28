@@ -13,9 +13,7 @@ const API_KEY = process.env.GEMINI_API_KEY || '';
 
 // Daftar model yang dicoba berurutan (fallback)
 const MODEL_FALLBACKS = [
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash'
+  'gemini-2.5-flash'
 ];
 
 const buildPrompt = (materi, jumlahSoal) => `
