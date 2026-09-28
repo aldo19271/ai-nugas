@@ -9,11 +9,16 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const API_KEY = process.env.GEMINI_API_KEY || '';
+// API key dibaca dari environment variable, di-trim untuk buang spasi/enter
+const API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
 // Daftar model yang dicoba berurutan (fallback)
+// 'gemini-flash-latest' adalah alias universal yang selalu tersedia
 const MODEL_FALLBACKS = [
-  'gemini-2.5-flash'
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest'
 ];
 
 const buildPrompt = (materi, jumlahSoal) => `
@@ -104,7 +109,7 @@ async function callGemini(prompt) {
           // 404 → model tidak ada, langsung coba model berikutnya
           if (response.status === 404) {
             lastError = `Model ${modelName} tidak tersedia.`;
-            break; // keluar dari loop attempt, lanjut ke model berikutnya
+            break;
           }
 
           throw new Error(errMsg);
