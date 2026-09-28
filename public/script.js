@@ -21,8 +21,159 @@ const viewMateri = $('viewMateri');
 const materiText = $('materiText');
 const fileItem = $('fileItem');
 const fileName = $('fileName');
+const sidebar = $('sidebar');
+const overlay = $('overlay');
+const panel = $('panel');
 
-// ====== UTIL: LOG KE TERMINAL ======
+// ====== LUCIDE HELPER ======
+function refreshIcons() {
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// ====== MOBILE DRAWER ======
+$('btnMenu').onclick = () => {
+  sidebar.classList.add('open');
+  overlay.classList.add('show');
+};
+overlay.onclick = () => {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('show');
+};
+
+$('panelToggle').onclick = () => {
+  panel.classList.toggle('collapsed');
+  setTimeout(refreshIcons, 50);
+};
+
+if (window.innerWidth <= 768) {
+  panel.classList.add('collapsed');
+}
+
+// ==================================================
+// ====== SFX (Web Audio API - tanpa file audio) ======
+// ==================================================
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.warn('AudioContext tidak didukung:', e);
+    }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  return audioCtx;
+}
+
+function playTone(freq, duration, type = 'sine', volume = 0.12, delay = 0) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, now);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(volume, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + duration + 0.05);
+}
+
+function playClickSfx() {
+  playTone(1400, 0.06, 'square', 0.04, 0);
+  playTone(1800, 0.05, 'square', 0.03, 0.04);
+}
+
+function playCorrectSfx() {
+  playTone(880, 0.1, 'sine', 0.08, 0);
+  playTone(1320, 0.15, 'sine', 0.08, 0.08);
+}
+
+function playWrongSfx() {
+  playTone(400, 0.15, 'triangle', 0.08, 0);
+  playTone(280, 0.25, 'triangle', 0.08, 0.12);
+}
+
+function playVictorySfx() {
+  const notes = [523.25, 659.25, 783.99, 1046.50];
+  notes.forEach((f, i) => playTone(f, 0.4, 'sine', 0.12, i * 0.12));
+  playTone(1568, 0.3, 'sine', 0.08, 0.6);
+  playTone(2093, 0.5, 'sine', 0.06, 0.75);
+}
+
+function playSadSfx() {
+  playTone(440, 0.3, 'triangle', 0.1, 0);
+  playTone(392, 0.3, 'triangle', 0.1, 0.15);
+  playTone(329.63, 0.6, 'triangle', 0.1, 0.3);
+}
+
+function playConfettiSfx() {
+  for (let i = 0; i < 6; i++) {
+    playTone(600 + i * 250, 0.12, 'sine', 0.05, i * 0.06);
+  }
+}
+
+// ==================================================
+// ====== CONFETTI ======
+// ==================================================
+const CONFETTI_COLORS = ['#007acc', '#4ec9b0', '#dcdcaa', '#f48771', '#c586c0', '#ffffff'];
+
+function fireConfetti(level = 'medium') {
+  if (typeof confetti !== 'function') return;
+
+  if (level === 'high') {
+    confetti({
+      particleCount: 120,
+      spread: 100,
+      origin: { y: 0.55 },
+      colors: CONFETTI_COLORS,
+      scalar: 1.1
+    });
+
+    const duration = 2500;
+    const end = Date.now() + duration;
+    (function frame() {
+      confetti({
+        particleCount: 4,
+        angle: 60,
+        spread: 60,
+        origin: { x: 0, y: 0.7 },
+        colors: CONFETTI_COLORS
+      });
+      confetti({
+        particleCount: 4,
+        angle: 120,
+        spread: 60,
+        origin: { x: 1, y: 0.7 },
+        colors: CONFETTI_COLORS
+      });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  } else if (level === 'medium') {
+    confetti({
+      particleCount: 60,
+      spread: 75,
+      origin: { y: 0.6 },
+      colors: CONFETTI_COLORS
+    });
+  } else {
+    confetti({
+      particleCount: 25,
+      spread: 55,
+      origin: { y: 0.65 },
+      colors: CONFETTI_COLORS
+    });
+  }
+}
+
+// ==================================================
+// ====== UTIL LOG ======
+// ==================================================
 function log(msg, type = '') {
   const div = document.createElement('div');
   div.className = 'term-line' + (type ? ' ' + type : '');
@@ -31,8 +182,13 @@ function log(msg, type = '') {
   terminal.scrollTop = terminal.scrollHeight;
 }
 
-function setStatus(text, icon = '🔵') {
-  $('statusIcon').textContent = icon;
+function setStatus(text, color = 'green') {
+  const colors = { green: '#4ec9b0', yellow: '#dcdcaa', red: '#f48771', blue: '#007acc' };
+  const icon = $('statusIcon');
+  if (icon) {
+    icon.style.fill = colors[color] || colors.green;
+    icon.style.stroke = colors[color] || colors.green;
+  }
   statusText.textContent = text;
 }
 
@@ -69,12 +225,12 @@ fileInput.onchange = (e) => { if (e.target.files[0]) handleFile(e.target.files[0
 async function handleFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (!['pdf', 'docx', 'txt'].includes(ext)) {
-    log('❌ Format tidak didukung. Gunakan PDF/DOCX/TXT.', 'err');
+    log('Format tidak didukung. Gunakan PDF/DOCX/TXT.', 'err');
     return;
   }
 
-  log(`📄 Membaca file: ${file.name}`, 'warn');
-  setStatus('Membaca file...', '🟡');
+  log(`Membaca file: ${file.name}`, 'warn');
+  setStatus('Membaca file...', 'yellow');
 
   try {
     let text = '';
@@ -92,16 +248,21 @@ async function handleFile(file) {
     materiText.textContent = text;
 
     btnGenerate.disabled = false;
-    log(`✅ File berhasil dibaca (${text.length} karakter).`, 'ok');
-    log('▶ Klik "Generate Soal" untuk memulai.', 'dim');
-    setStatus('File siap', '🟢');
+    log(`File berhasil dibaca (${text.length} karakter).`, 'ok');
+    log('Klik "Generate Soal" untuk memulai.', 'dim');
+    setStatus('File siap', 'green');
+    refreshIcons();
+
+    if (window.innerWidth <= 768) {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('show');
+    }
   } catch (err) {
-    log('❌ ' + err.message, 'err');
-    setStatus('Gagal baca file', '🔴');
+    log(err.message, 'err');
+    setStatus('Gagal baca file', 'red');
   }
 }
 
-// ====== PARSER PDF ======
 async function parsePDF(file) {
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
@@ -114,20 +275,19 @@ async function parsePDF(file) {
   return text;
 }
 
-// ====== PARSER DOCX ======
 async function parseDOCX(file) {
   const buf = await file.arrayBuffer();
   const result = await mammoth.extractRawText({ arrayBuffer: buf });
   return result.value;
 }
 
-// ====== GENERATE SOAL ======
+// ====== GENERATE ======
 btnGenerate.onclick = async () => {
   const jumlahSoal = parseInt($('jumlahSoal').value) || 10;
   btnGenerate.disabled = true;
-  btnGenerate.innerHTML = '<span class="spinner"></span>Memproses...';
-  setStatus('AI menganalisis...', '🟡');
-  log('🤖 Mengirim ke Gemini AI...', 'warn');
+  btnGenerate.innerHTML = '<span class="spinner"></span> Memproses...';
+  setStatus('AI menganalisis...', 'yellow');
+  log('Mengirim ke Gemini AI...', 'warn');
 
   try {
     const res = await fetch('/api/generate', {
@@ -144,23 +304,29 @@ btnGenerate.onclick = async () => {
     state.currentIndex = 0;
     state.jawabanUser = [];
 
-    log(`✅ AI selesai! Mode: ${json.data.mode}`, 'ok');
-    log(`📝 ${json.data.soal.length} soal berhasil dibuat.`, 'ok');
+    log(`AI selesai! Mode: ${json.data.mode}`, 'ok');
+    log(`${json.data.soal.length} soal berhasil dibuat.`, 'ok');
 
     switchTab('kuis');
     renderQuiz();
-    setStatus('Kuis siap', '🟢');
+    setStatus('Kuis siap', 'green');
   } catch (err) {
-    log('❌ ' + err.message, 'err');
-    setStatus('Gagal generate', '🔴');
-    viewKuis.innerHTML = `<div class="welcome"><div class="welcome-logo">⚠️</div><h1>Gagal</h1><p class="welcome-sub">${err.message}</p></div>`;
+    log(err.message, 'err');
+    setStatus('Gagal generate', 'red');
+    viewKuis.innerHTML = `<div class="welcome">
+      <i data-lucide="alert-triangle" class="welcome-logo" style="color:#dcdcaa;"></i>
+      <h1>Gagal</h1>
+      <p class="welcome-sub">${err.message}</p>
+    </div>`;
+    refreshIcons();
   } finally {
     btnGenerate.disabled = false;
-    btnGenerate.innerHTML = '▶ Generate Soal';
+    btnGenerate.innerHTML = '<i data-lucide="play"></i> Generate Soal';
+    refreshIcons();
   }
 };
 
-// ====== RENDER KUIS ======
+// ====== RENDER QUIZ ======
 function renderQuiz() {
   const { soal, judul } = state.kuisData;
   const idx = state.currentIndex;
@@ -192,13 +358,16 @@ function renderQuiz() {
 
   html += `</div><div id="penjelasanBox"></div>
     <div class="quiz-actions">
-      <button class="btn" id="btnPrev" ${idx === 0 ? 'disabled' : ''}>← Sebelumnya</button>
-      <button class="btn primary" id="btnNext" disabled>${idx === total - 1 ? 'Selesai' : 'Selanjutnya →'}</button>
+      <button class="btn" id="btnPrev" ${idx === 0 ? 'disabled' : ''}>
+        <i data-lucide="chevron-left"></i> Sebelumnya
+      </button>
+      <button class="btn primary" id="btnNext" disabled>
+        ${idx === total - 1 ? 'Selesai' : 'Selanjutnya'} <i data-lucide="chevron-right"></i>
+      </button>
     </div></div>`;
 
   viewKuis.innerHTML = html;
 
-  // Event pilihan
   let selectedKey = state.jawabanUser[idx] || null;
   const pilihanEls = document.querySelectorAll('.pilihan');
 
@@ -226,24 +395,38 @@ function renderQuiz() {
         else if (p.dataset.key === selectedKey) p.classList.add('wrong');
       });
       el.classList.add('selected');
+
+      if (selectedKey === q.jawaban_benar) playCorrectSfx();
+      else playWrongSfx();
+
       showPenjelasan(q);
       $('btnNext').disabled = false;
       updateSkorSementara();
+      refreshIcons();
     };
   });
 
-  // Nav
-  $('btnPrev').onclick = () => { if (idx > 0) { state.currentIndex--; renderQuiz(); } };
+  $('btnPrev').onclick = () => {
+    playClickSfx();
+    if (idx > 0) { state.currentIndex--; renderQuiz(); }
+  };
   $('btnNext').onclick = () => {
+    playClickSfx();
     if (idx === total - 1) renderResult();
     else { state.currentIndex++; renderQuiz(); }
   };
+
+  refreshIcons();
 }
 
 function showPenjelasan(q) {
   const box = $('penjelasanBox');
   if (q.penjelasan) {
-    box.innerHTML = `<div class="penjelasan"><b>💡 Penjelasan:</b> ${escapeHtml(q.penjelasan)}</div>`;
+    box.innerHTML = `<div class="penjelasan">
+      <i data-lucide="lightbulb"></i>
+      <div><b>Penjelasan:</b> ${escapeHtml(q.penjelasan)}</div>
+    </div>`;
+    refreshIcons();
   }
 }
 
@@ -256,7 +439,9 @@ function updateSkorSementara() {
   statusSkor.textContent = `Skor: ${benar}/${soal.length}`;
 }
 
-// ====== HASIL AKHIR ======
+// ==================================================
+// ====== RESULT + CONFETTI + SFX ======
+// ==================================================
 function renderResult() {
   const soal = state.kuisData.soal;
   let benar = 0;
@@ -266,40 +451,63 @@ function renderResult() {
   const total = soal.length;
   const nilai = Math.round((benar / total) * 100);
 
-  let emoji = '😢', msg = 'Perlu belajar lagi!';
-  if (nilai >= 80) { emoji = '🏆'; msg = 'Luar biasa!'; }
-  else if (nilai >= 60) { emoji = '👍'; msg = 'Bagus, terus tingkatkan!'; }
+  let icon = 'frown', color = '#f48771', msg = 'Perlu belajar lagi!';
+  if (nilai >= 80) { icon = 'trophy'; color = '#dcdcaa'; msg = 'Luar biasa!'; }
+  else if (nilai >= 60) { icon = 'thumbs-up'; color = '#4ec9b0'; msg = 'Bagus, terus tingkatkan!'; }
 
   viewKuis.innerHTML = `
     <div class="result">
-      <div class="result-emoji">${emoji}</div>
+      <i data-lucide="${icon}" class="result-emoji" style="color:${color};"></i>
       <h2>${msg}</h2>
       <div class="result-score">${nilai}</div>
       <div class="result-detail">Jawaban benar: ${benar} dari ${total}</div>
       <div class="quiz-actions" style="justify-content:center;">
-        <button class="btn" id="btnReset">🔄 Ulangi Kuis</button>
-        <button class="btn primary" id="btnNew">📄 Upload File Baru</button>
+        <button class="btn" id="btnReset"><i data-lucide="rotate-ccw"></i> Ulangi Kuis</button>
+        <button class="btn primary" id="btnNew"><i data-lucide="upload"></i> Upload File Baru</button>
       </div>
     </div>
   `;
 
   statusSkor.textContent = `Skor: ${benar}/${total} (${nilai})`;
-  setStatus('Kuis selesai', '🟢');
-  log(`🎉 Kuis selesai. Skor: ${nilai} (${benar}/${total})`, 'ok');
+  setStatus('Kuis selesai', 'green');
+  log(`Kuis selesai. Skor: ${nilai} (${benar}/${total})`, 'ok');
+  refreshIcons();
+
+  if (nilai >= 80) {
+    log('Sempurna! Confetti!', 'ok');
+    playVictorySfx();
+    playConfettiSfx();
+    setTimeout(() => fireConfetti('high'), 150);
+  } else if (nilai >= 60) {
+    log('Bagus! Pertahankan!', 'ok');
+    playVictorySfx();
+    fireConfetti('medium');
+  } else {
+    log('Jangan menyerah, coba lagi!', 'warn');
+    playSadSfx();
+    fireConfetti('low');
+  }
 
   $('btnReset').onclick = () => {
+    playClickSfx();
     state.currentIndex = 0;
     state.jawabanUser = [];
     renderQuiz();
   };
   $('btnNew').onclick = () => {
+    playClickSfx();
     state = { ...state, kuisData: null, currentIndex: 0, jawabanUser: [], materiText: '', fileName: '' };
     fileItem.hidden = true;
     btnGenerate.disabled = true;
-    viewKuis.innerHTML = `<div class="welcome"><div class="welcome-logo">🎓</div><h1>BelajarAI</h1><p class="welcome-sub">Upload file baru untuk memulai</p></div>`;
+    viewKuis.innerHTML = `<div class="welcome">
+      <i data-lucide="graduation-cap" class="welcome-logo"></i>
+      <h1>BelajarAI</h1>
+      <p class="welcome-sub">Upload file baru untuk memulai</p>
+    </div>`;
     statusSkor.textContent = 'Skor: -';
-    setStatus('Siap', '🔵');
+    setStatus('Siap', 'green');
     fileInput.value = '';
+    refreshIcons();
   };
 }
 
@@ -312,6 +520,7 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// Init
+// ====== INIT ======
 log('BelajarAI v1.0.0 siap digunakan.', 'ok');
 log('Menunggu file di-upload...', 'dim');
+refreshIcons();
