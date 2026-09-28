@@ -12,6 +12,7 @@
   --green: #4ec9b0;
   --yellow: #dcdcaa;
   --red: #f48771;
+  --pink: #e1306c;
   --hover: #2a2d2e;
 }
 
@@ -79,11 +80,7 @@ i[data-lucide], svg.lucide {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.titlebar-actions {
-  display: flex;
-  gap: 12px;
-  color: var(--text-dim);
-}
+.titlebar-actions { display: flex; gap: 12px; color: var(--text-dim); }
 .titlebar-actions svg { width: 12px; height: 12px; }
 
 /* APP GRID */
@@ -196,6 +193,121 @@ i[data-lucide], svg.lucide {
   background: rgba(244,135,113,0.15);
   color: var(--red);
 }
+
+/* ============================================
+   CREATOR CARD
+   ============================================ */
+.creator-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: inherit;
+  background: linear-gradient(135deg, rgba(225,48,108,0.08), rgba(131,58,180,0.05));
+  border: 1px solid rgba(225,48,108,0.25);
+  transition: 0.2s;
+  cursor: pointer;
+}
+.creator-card:hover {
+  background: linear-gradient(135deg, rgba(225,48,108,0.18), rgba(131,58,180,0.12));
+  border-color: rgba(225,48,108,0.55);
+  transform: translateY(-1px);
+}
+.creator-card:active { transform: translateY(0); }
+
+.creator-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(225,48,108,0.35);
+}
+.creator-avatar svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: #fff;
+  stroke-width: 2;
+}
+
+.creator-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.creator-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.creator-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.creator-arrow {
+  width: 13px !important;
+  height: 13px !important;
+  color: var(--text-dim);
+  transition: 0.2s;
+  flex-shrink: 0;
+}
+.creator-card:hover .creator-arrow {
+  color: var(--pink);
+  transform: translate(1px, -1px);
+}
+
+/* SIDEBAR FOOTER */
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 14px;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  border-top: 1px solid var(--border);
+  margin-left: 8px;
+  margin-right: 8px;
+}
+.footer-accent { color: var(--pink); font-weight: 600; }
+
+/* WELCOME CREDIT */
+.welcome-credit {
+  margin-top: 24px;
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.welcome-credit a {
+  color: var(--pink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(225,48,108,0.1);
+  border: 1px solid rgba(225,48,108,0.3);
+  transition: 0.15s;
+  font-weight: 500;
+}
+.welcome-credit a:hover {
+  background: rgba(225,48,108,0.2);
+  border-color: var(--pink);
+}
+.welcome-credit a svg { width: 13px !important; height: 13px !important; }
 
 /* UPLOAD ZONE */
 .upload-zone {
@@ -658,16 +770,13 @@ i[data-lucide], svg.lucide {
   }
   .sidebar.open { transform: translateX(0); }
 
-  /* Di mobile: tombol hapus selalu terlihat (tidak ada hover) */
   .file-remove { opacity: 1; }
 
   .panel {
     max-height: 180px;
     transition: max-height 0.25s;
   }
-  .panel.collapsed {
-    max-height: 32px;
-  }
+  .panel.collapsed { max-height: 32px; }
   .panel.collapsed .panel-content { display: none; }
   .panel-toggle svg { transition: transform 0.2s; }
   .panel.collapsed .panel-toggle svg { transform: rotate(180deg); }
@@ -690,4 +799,8 @@ i[data-lucide], svg.lucide {
   .result-emoji { width: 60px !important; height: 60px !important; }
 
   .status-right span:not(#statusSkor) { display: none; }
+
+  .creator-card { margin: 4px 8px; padding: 10px; }
+  .creator-avatar { width: 38px; height: 38px; }
+  .creator-name { font-size: 13px; }
 }
