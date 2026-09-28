@@ -21,6 +21,7 @@ const viewMateri = $('viewMateri');
 const materiText = $('materiText');
 const fileItem = $('fileItem');
 const fileName = $('fileName');
+const fileRemove = $('fileRemove');
 const sidebar = $('sidebar');
 const overlay = $('overlay');
 const panel = $('panel');
@@ -50,7 +51,7 @@ if (window.innerWidth <= 768) {
 }
 
 // ==================================================
-// ====== SFX (Web Audio API - tanpa file audio) ======
+// ====== SFX (Web Audio API) ======
 // ==================================================
 let audioCtx = null;
 
@@ -116,6 +117,12 @@ function playConfettiSfx() {
   for (let i = 0; i < 6; i++) {
     playTone(600 + i * 250, 0.12, 'sine', 0.05, i * 0.06);
   }
+}
+
+// Suara "hapus" (blip turun)
+function playRemoveSfx() {
+  playTone(600, 0.08, 'sawtooth', 0.05, 0);
+  playTone(400, 0.12, 'sawtooth', 0.05, 0.08);
 }
 
 // ==================================================
@@ -192,6 +199,55 @@ function setStatus(text, color = 'green') {
   statusText.textContent = text;
 }
 
+// ==================================================
+// ====== RESET FILE (dipakai tombol hapus & upload baru) ======
+// ==================================================
+function resetFileState(silent = false) {
+  state.materiText = '';
+  state.fileName = '';
+  state.kuisData = null;
+  state.currentIndex = 0;
+  state.jawabanUser = [];
+
+  fileItem.hidden = true;
+  fileName.textContent = '-';
+  materiText.textContent = 'Belum ada materi yang di-upload.';
+  btnGenerate.disabled = true;
+  fileInput.value = '';
+  statusSkor.textContent = 'Skor: -';
+
+  // Reset tampilan ke welcome screen
+  viewKuis.innerHTML = `<div class="welcome">
+    <i data-lucide="graduation-cap" class="welcome-logo"></i>
+    <h1>BelajarAI</h1>
+    <p class="welcome-sub">Upload file materi / soal untuk memulai</p>
+    <div class="welcome-steps">
+      <div class="step"><span class="step-num">1</span> Upload file materi / soal</div>
+      <div class="step"><span class="step-num">2</span> Klik <b>Generate Soal</b></div>
+      <div class="step"><span class="step-num">3</span> Kerjakan kuis interaktif</div>
+    </div>
+  </div>`;
+
+  switchTab('kuis');
+
+  if (!silent) {
+    setStatus('File dihapus', 'yellow');
+  }
+  refreshIcons();
+}
+
+// ==================================================
+// ====== TOMBOL HAPUS FILE ======
+// ==================================================
+fileRemove.onclick = (e) => {
+  e.stopPropagation();       // jangan trigger parent click
+  e.preventDefault();
+  playRemoveSfx();
+  resetFileState();
+  log('File dihapus. Silakan upload file baru.', 'warn');
+  refreshIcons();
+};
+
 // ====== TAB SWITCHING ======
 $('tabSoal').onclick = () => switchTab('kuis');
 $('tabMateri').onclick = () => switchTab('materi');
@@ -228,6 +284,9 @@ async function handleFile(file) {
     log('Format tidak didukung. Gunakan PDF/DOCX/TXT.', 'err');
     return;
   }
+
+  // Reset dulu supaya bersih kalau sebelumnya sudah ada file
+  resetFileState(true);
 
   log(`Membaca file: ${file.name}`, 'warn');
   setStatus('Membaca file...', 'yellow');
@@ -496,17 +555,9 @@ function renderResult() {
   };
   $('btnNew').onclick = () => {
     playClickSfx();
-    state = { ...state, kuisData: null, currentIndex: 0, jawabanUser: [], materiText: '', fileName: '' };
-    fileItem.hidden = true;
-    btnGenerate.disabled = true;
-    viewKuis.innerHTML = `<div class="welcome">
-      <i data-lucide="graduation-cap" class="welcome-logo"></i>
-      <h1>BelajarAI</h1>
-      <p class="welcome-sub">Upload file baru untuk memulai</p>
-    </div>`;
-    statusSkor.textContent = 'Skor: -';
+    resetFileState(true);
+    log('Silakan upload file baru.', 'dim');
     setStatus('Siap', 'green');
-    fileInput.value = '';
     refreshIcons();
   };
 }
