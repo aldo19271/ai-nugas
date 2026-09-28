@@ -124,7 +124,6 @@ function playRemoveSfx() {
   playTone(400, 0.12, 'sawtooth', 0.05, 0.08);
 }
 
-// Suara khusus Instagram (nada ceria pendek)
 function playIgSfx() {
   playTone(659.25, 0.1, 'sine', 0.08, 0);
   playTone(880, 0.1, 'sine', 0.08, 0.09);
@@ -228,18 +227,18 @@ function resetFileState(silent = false) {
 
   fileItem.hidden = true;
   fileName.textContent = '-';
-  materiText.textContent = 'Belum ada materi yang di-upload.';
+  materiText.textContent = 'Belum ada file/materi yang di-upload.';
   btnGenerate.disabled = true;
   fileInput.value = '';
-  statusSkor.textContent = 'Skor: -';
+  statusSkor.textContent = 'Score: -';
 
   viewKuis.innerHTML = `<div class="welcome">
     <i data-lucide="graduation-cap" class="welcome-logo"></i>
-    <h1>NugasAI</h1>
+    <h1>Nugas.AI</h1>
     <p class="welcome-sub">Upload file materi / soal untuk memulai</p>
     <div class="welcome-steps">
       <div class="step"><span class="step-num">1</span> Buka Garis 3 Sebelah Kiri Atas, Lalu Upload file materi / soal</div>
-      <div class="step"><span class="step-num">2</span> Klik <b>Generate kuis</b></div>
+      <div class="step"><span class="step-num">2</span> Klik <b>Generate Kuis</b></div>
       <div class="step"><span class="step-num">3</span> Kerjakan kuis</div>
     </div>
   </div>`;
@@ -368,7 +367,20 @@ btnGenerate.onclick = async () => {
       body: JSON.stringify({ text: state.materiText, jumlahSoal })
     });
 
-    const json = await res.json();
+    // Baca sebagai text dulu, biar tidak error kalau server balas HTML
+    const rawText = await res.text();
+
+    let json;
+    try {
+      json = JSON.parse(rawText);
+    } catch (parseErr) {
+      // Response bukan JSON — biasanya timeout Vercel
+      if (rawText.includes('An error') || rawText.includes('error occurred') || rawText.includes('FUNCTION_INVOCATION')) {
+        throw new Error('Server timeout / overload. Tunggu 30 detik lalu coba lagi.');
+      }
+      throw new Error('Server balas format tidak dikenal. Coba lagi sebentar.');
+    }
+
     if (!res.ok) throw new Error(json.error || 'Gagal dari server.');
 
     state.kuisData = json.data;
@@ -508,7 +520,7 @@ function updateSkorSementara() {
   soal.forEach((q, i) => {
     if (state.jawabanUser[i] === q.jawaban_benar) benar++;
   });
-  statusSkor.textContent = `Skor: ${benar}/${soal.length}`;
+  statusSkor.textContent = `Score: ${benar}/${soal.length}`;
 }
 
 // ==================================================
@@ -540,7 +552,7 @@ function renderResult() {
     </div>
   `;
 
-  statusSkor.textContent = `Skor: ${benar}/${total} (${nilai})`;
+  statusSkor.textContent = `Score: ${benar}/${total} (${nilai})`;
   setStatus('Kuis selesai', 'green');
   log(`Kuis selesai. Skor: ${nilai} (${benar}/${total})`, 'ok');
   refreshIcons();
