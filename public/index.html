@@ -2,17 +2,23 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>BelajarAI — Soal Generator</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Library parser -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
 <body>
 
+<!-- OVERLAY (mobile) -->
+<div class="overlay" id="overlay"></div>
+
 <!-- TITLE BAR -->
 <div class="titlebar">
+  <button class="hamburger" id="btnMenu" aria-label="Menu">
+    <i data-lucide="menu"></i>
+  </button>
   <div class="traffic">
     <span class="dot red"></span>
     <span class="dot yellow"></span>
@@ -20,7 +26,9 @@
   </div>
   <div class="titlebar-text">BelajarAI — Soal Generator</div>
   <div class="titlebar-actions">
-    <span>—</span><span>□</span><span>×</span>
+    <i data-lucide="minus"></i>
+    <i data-lucide="square"></i>
+    <i data-lucide="x"></i>
   </div>
 </div>
 
@@ -29,29 +37,29 @@
 
   <!-- ACTIVITY BAR -->
   <aside class="activitybar">
-    <div class="act-icon active" title="Explorer">📁</div>
-    <div class="act-icon" title="Search">🔍</div>
-    <div class="act-icon" title="Quiz">📝</div>
-    <div class="act-icon" title="Settings">⚙️</div>
+    <div class="act-icon active" title="Explorer"><i data-lucide="files"></i></div>
+    <div class="act-icon" title="Search"><i data-lucide="search"></i></div>
+    <div class="act-icon" title="Quiz"><i data-lucide="clipboard-list"></i></div>
+    <div class="act-icon" title="Settings"><i data-lucide="settings"></i></div>
   </aside>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">EXPLORER</div>
     <div class="sidebar-section">
-      <div class="section-title">📂 BELAJAR-AI</div>
+      <div class="section-title"><i data-lucide="folder-open"></i> BELAJAR-AI</div>
       <div class="file-item" id="fileItem" hidden>
-        <span class="file-icon">📄</span>
+        <i data-lucide="file-text" class="file-icon"></i>
         <span class="file-name" id="fileName">-</span>
       </div>
     </div>
 
     <div class="sidebar-header">UPLOAD FILE</div>
     <div class="upload-zone" id="uploadZone">
-      <div class="upload-icon">⬆️</div>
+      <i data-lucide="upload-cloud" class="upload-icon"></i>
       <div class="upload-text">Drop file di sini</div>
       <div class="upload-sub">atau klik untuk pilih</div>
-      <div class="upload-sub" style="margin-top:6px; font-size:10px; color:#666;">PDF • DOCX • TXT</div>
+      <div class="upload-sub" style="font-size:10px; color:#666;">PDF • DOCX • TXT</div>
       <input type="file" id="fileInput" accept=".pdf,.docx,.txt" hidden />
     </div>
 
@@ -62,32 +70,28 @@
     </div>
 
     <button id="btnGenerate" class="btn-primary" disabled>
-      ▶ Generate Soal
+      <i data-lucide="play"></i> Generate Soal
     </button>
   </aside>
 
   <!-- EDITOR AREA -->
   <main class="editor">
-    <!-- TABS -->
     <div class="tabs">
       <div class="tab active" id="tabSoal">
-        <span>📝 kuis.json</span>
+        <i data-lucide="clipboard-list"></i> <span>kuis.json</span>
       </div>
       <div class="tab" id="tabMateri">
-        <span>📄 materi.txt</span>
+        <i data-lucide="file-text"></i> <span>materi.txt</span>
       </div>
     </div>
 
-    <!-- BREADCRUMB -->
     <div class="breadcrumb" id="breadcrumb">belajar-ai › kuis.json</div>
 
-    <!-- CONTENT: KUIS -->
     <div class="editor-content" id="viewKuis">
       <div class="welcome">
-        <div class="welcome-logo">🎓</div>
+        <i data-lucide="graduation-cap" class="welcome-logo"></i>
         <h1>BelajarAI</h1>
         <p class="welcome-sub">Buat soal latihan ujian dari materi PDF/DOCX dengan AI</p>
-
         <div class="welcome-steps">
           <div class="step"><span class="step-num">1</span> Upload file materi / soal</div>
           <div class="step"><span class="step-num">2</span> Klik <b>Generate Soal</b></div>
@@ -96,35 +100,35 @@
       </div>
     </div>
 
-    <!-- CONTENT: MATERI -->
     <div class="editor-content" id="viewMateri" hidden>
       <pre id="materiText" class="materi-pre">Belum ada materi yang di-upload.</pre>
     </div>
 
-    <!-- STATUS BAR -->
     <div class="statusbar">
       <div class="status-left">
-        <span id="statusIcon">🔵</span>
+        <i data-lucide="circle" class="status-icon" id="statusIcon"></i>
         <span id="statusText">Siap</span>
       </div>
       <div class="status-right">
         <span>UTF-8</span>
-        <span>JavaScript</span>
         <span id="statusSkor">Skor: -</span>
       </div>
     </div>
   </main>
 
   <!-- TERMINAL PANEL -->
-  <section class="panel">
+  <section class="panel" id="panel">
     <div class="panel-tabs">
       <div class="panel-tab active">TERMINAL</div>
       <div class="panel-tab">OUTPUT</div>
       <div class="panel-tab">PROBLEMS</div>
+      <button class="panel-toggle" id="panelToggle" aria-label="Toggle panel">
+        <i data-lucide="chevron-down"></i>
+      </button>
     </div>
     <div class="panel-content" id="terminal">
-      <div class="term-line">> BelajarAI v1.0.0 siap digunakan.</div>
-      <div class="term-line">> Menunggu file di-upload...</div>
+      <div class="term-line">&gt; BelajarAI v1.0.0 siap digunakan.</div>
+      <div class="term-line">&gt; Menunggu file di-upload...</div>
     </div>
   </section>
 
