@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BelajarAI — Soal Generator</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Library parser -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+</head>
+<body>
+
+<!-- TITLE BAR -->
+<div class="titlebar">
+  <div class="traffic">
+    <span class="dot red"></span>
+    <span class="dot yellow"></span>
+    <span class="dot green"></span>
+  </div>
+  <div class="titlebar-text">BelajarAI — Soal Generator</div>
+  <div class="titlebar-actions">
+    <span>—</span><span>□</span><span>×</span>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="app">
+
+  <!-- ACTIVITY BAR -->
+  <aside class="activitybar">
+    <div class="act-icon active" title="Explorer">📁</div>
+    <div class="act-icon" title="Search">🔍</div>
+    <div class="act-icon" title="Quiz">📝</div>
+    <div class="act-icon" title="Settings">⚙️</div>
+  </aside>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">EXPLORER</div>
+    <div class="sidebar-section">
+      <div class="section-title">📂 BELAJAR-AI</div>
+      <div class="file-item" id="fileItem" hidden>
+        <span class="file-icon">📄</span>
+        <span class="file-name" id="fileName">-</span>
+      </div>
+    </div>
+
+    <div class="sidebar-header">UPLOAD FILE</div>
+    <div class="upload-zone" id="uploadZone">
+      <div class="upload-icon">⬆️</div>
+      <div class="upload-text">Drop file di sini</div>
+      <div class="upload-sub">atau klik untuk pilih</div>
+      <div class="upload-sub" style="margin-top:6px; font-size:10px; color:#666;">PDF • DOCX • TXT</div>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.txt" hidden />
+    </div>
+
+    <div class="sidebar-header">PENGATURAN</div>
+    <div class="setting-item">
+      <label>Jumlah soal (jika materi saja)</label>
+      <input type="number" id="jumlahSoal" value="10" min="1" max="50" />
+    </div>
+
+    <button id="btnGenerate" class="btn-primary" disabled>
+      ▶ Generate Soal
+    </button>
+  </aside>
+
+  <!-- EDITOR AREA -->
+  <main class="editor">
+    <!-- TABS -->
+    <div class="tabs">
+      <div class="tab active" id="tabSoal">
+        <span>📝 kuis.json</span>
+      </div>
+      <div class="tab" id="tabMateri">
+        <span>📄 materi.txt</span>
+      </div>
+    </div>
+
+    <!-- BREADCRUMB -->
+    <div class="breadcrumb" id="breadcrumb">belajar-ai › kuis.json</div>
+
+    <!-- CONTENT: KUIS -->
+    <div class="editor-content" id="viewKuis">
+      <div class="welcome">
+        <div class="welcome-logo">🎓</div>
+        <h1>BelajarAI</h1>
+        <p class="welcome-sub">Buat soal latihan ujian dari materi PDF/DOCX dengan AI</p>
+
+        <div class="welcome-steps">
+          <div class="step"><span class="step-num">1</span> Upload file materi / soal</div>
+          <div class="step"><span class="step-num">2</span> Klik <b>Generate Soal</b></div>
+          <div class="step"><span class="step-num">3</span> Kerjakan kuis interaktif</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT: MATERI -->
+    <div class="editor-content" id="viewMateri" hidden>
+      <pre id="materiText" class="materi-pre">Belum ada materi yang di-upload.</pre>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div class="statusbar">
+      <div class="status-left">
+        <span id="statusIcon">🔵</span>
+        <span id="statusText">Siap</span>
+      </div>
+      <div class="status-right">
+        <span>UTF-8</span>
+        <span>JavaScript</span>
+        <span id="statusSkor">Skor: -</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- TERMINAL PANEL -->
+  <section class="panel">
+    <div class="panel-tabs">
+      <div class="panel-tab active">TERMINAL</div>
+      <div class="panel-tab">OUTPUT</div>
+      <div class="panel-tab">PROBLEMS</div>
+    </div>
+    <div class="panel-content" id="terminal">
+      <div class="term-line">> BelajarAI v1.0.0 siap digunakan.</div>
+      <div class="term-line">> Menunggu file di-upload...</div>
+    </div>
+  </section>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
