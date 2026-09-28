@@ -1,4 +1,4 @@
-// Nugas.AI - v3
+// Nugas.AI - v4
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -10,12 +10,15 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// ====== API KEYS ======
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
-const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+// ====== DAFTAR MODEL (VERSI TERBARU) ======
+const GEMINI_MODELS = ['gemini-3.8-flash'];
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
 
+// ====== PROMPT BUILDER ======
 function buildPrompt(materi, jumlahSoal) {
   return 'Kamu adalah AI pembuat soal ujian yang AKURAT dan TELITI.\n\n' +
     'TUGAS: Analisis materi berikut, lalu hasilkan soal kuis pilihan ganda.\n\n' +
@@ -55,6 +58,7 @@ function buildPrompt(materi, jumlahSoal) {
     'MATERI:\n"""\n' + materi + '\n"""\n';
 }
 
+// ====== FETCH DENGAN TIMEOUT ======
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -66,6 +70,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+// ====== PROVIDER 1: GEMINI ======
 async function callGemini(prompt) {
   if (!GEMINI_KEY) throw new Error('NO_KEY');
   let lastError = '';
@@ -114,6 +119,7 @@ async function callGemini(prompt) {
   throw new Error('Gemini gagal: ' + lastError);
 }
 
+// ====== PROVIDER 2: GROQ ======
 async function callGroq(prompt) {
   if (!GROQ_KEY) throw new Error('NO_KEY');
   let lastError = '';
@@ -166,6 +172,7 @@ async function callGroq(prompt) {
   throw new Error('Groq gagal: ' + lastError);
 }
 
+// ====== ORKESTRATOR ======
 async function callAIWithFallback(prompt) {
   const providers = [
     { name: 'Gemini', fn: callGemini, hasKey: !!GEMINI_KEY },
@@ -194,6 +201,7 @@ async function callAIWithFallback(prompt) {
   throw new Error('Semua AI gagal coba lagi nanti.');
 }
 
+// ====== ENDPOINT ======
 app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
     const text = req.body.text;
@@ -232,7 +240,7 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    version: 'v3',
+    version: 'v4',
     providers: {
       gemini: !!GEMINI_KEY,
       groq: !!GROQ_KEY
