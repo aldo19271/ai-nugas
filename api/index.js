@@ -9,15 +9,11 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// API key dibaca dari environment variable, di-trim untuk buang spasi/enter
 const API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
-// Daftar model yang dicoba berurutan (fallback)
-// 'gemini-flash-latest' adalah alias universal yang selalu tersedia
+// Daftar model yang dicoba berurutan (maks 2 biar cepat, tidak kena timeout Vercel)
 const MODEL_FALLBACKS = [
   'gemini-flash-latest',
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
   'gemini-flash-lite-latest'
 ];
 
@@ -70,43 +66,66 @@ ${materi}
 """
 `;
 
-// Fungsi panggil Gemini REST API dengan retry + fallback
+// Fetch dengan timeout (biar tidak gantung kalau server lambat)
+async function fetchWithTimeout(url, options, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Panggil Gemini dengan retry cepat (total maks ~8 detik)
 async function callGemini(prompt) {
   let lastError = '';
 
   for (const modelName of MODEL_FALLBACKS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // Cuma 2 attempt per model, delay cuma 1 detik
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        console.log(`[Gemini] Coba model: ${modelName} (attempt ${attempt})`);
+        console.log(`[Gemini] Coba: ${modelName} (attempt ${attempt})`);
 
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.4,
-              responseMimeType: 'application/json'
+              responseMimeType: 'application/json',
+              maxOutputTokens: 8192
             }
           })
-        });
+        }, 8000);
 
-        const data = await response.json();
+        // Baca response sebagai text dulu, baru parse JSON kalau memungkinkan
+        const rawText = await response.text();
+
+        // Kalau response bukan JSON (kemungkinan Vercel/HTML error), tangani langsung
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          lastError = `Server balas format tidak dikenal: ${rawText.slice(0, 100)}`;
+          console.error(`[Gemini] Non-JSON response: ${rawText.slice(0, 200)}`);
+          break;
+        }
 
         if (!response.ok) {
           const errMsg = data.error?.message || `HTTP ${response.status}`;
           console.error(`[Gemini] Error: ${errMsg}`);
 
-          // 503 / 429 → tunggu, retry
           if (response.status === 503 || response.status === 429) {
             lastError = `Server sibuk (${response.status}). Mencoba lagi...`;
-            await new Promise(r => setTimeout(r, 3000 * attempt));
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
             continue;
           }
 
-          // 404 → model tidak ada, langsung coba model berikutnya
           if (response.status === 404) {
             lastError = `Model ${modelName} tidak tersedia.`;
             break;
@@ -115,22 +134,21 @@ async function callGemini(prompt) {
           throw new Error(errMsg);
         }
 
-        // Sukses!
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error('Respons AI kosong.');
 
-        console.log(`[Gemini] Sukses pakai model: ${modelName}`);
+        console.log(`[Gemini] Sukses: ${modelName}`);
         return text;
 
       } catch (err) {
         lastError = err.message;
         console.error(`[Gemini] Exception: ${err.message}`);
-        if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+        if (attempt < 2) await new Promise(r => setTimeout(r, 500));
       }
     }
   }
 
-  throw new Error(lastError || 'Semua model gagal. Coba beberapa menit lagi.');
+  throw new Error(lastError || 'Semua model gagal. Coba lagi beberapa menit.');
 }
 
 // Endpoint generate
@@ -145,7 +163,7 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
       return res.status(500).json({ error: 'GEMINI_API_KEY belum diset.' });
     }
 
-    const materi = text.slice(0, 30000);
+    const materi = text.slice(0, 25000);
     const prompt = buildPrompt(materi, parseInt(jumlahSoal));
 
     const raw = await callGemini(prompt);
