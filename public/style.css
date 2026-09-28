@@ -607,7 +607,7 @@ i[data-lucide], svg.lucide {
       "panel";
   }
 
-  /* Activity bar jadi fixed kiri tipis di atas */
+  /* Activity bar jadi drawer tersembunyi */
   .activitybar {
     position: fixed;
     left: 0;
