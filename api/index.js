@@ -13,18 +13,10 @@ app.use(express.json({ limit: '10mb' }));
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
-// ====== DAFTAR MODEL PER PROVIDER ======
-const GEMINI_MODELS = [
-  'gemini-flash-latest',
-  'gemini-2.5-flash',
-  'gemini-flash-lite-latest'
-];
-
-const GROQ_MODELS = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-  'gemma2-9b-it'
-];
+// ====== DAFTAR MODEL ======
+// Cuma 2 model per provider — biar cepat pindah
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
 // ====== PROMPT BUILDER ======
 const buildPrompt = (materi, jumlahSoal) => `
@@ -77,7 +69,7 @@ ${materi}
 `;
 
 // ====== FETCH DENGAN TIMEOUT ======
-async function fetchWithTimeout(url, options, timeoutMs = 25000) {
+async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -88,133 +80,109 @@ async function fetchWithTimeout(url, options, timeoutMs = 25000) {
   }
 }
 
-// ====== PROVIDER 1: GEMINI ======
+// ====== PROVIDER 1: GEMINI (timeout 12 detik) ======
 async function callGemini(prompt) {
   if (!GEMINI_KEY) throw new Error('NO_KEY');
-
   let lastError = '';
 
   for (const modelName of GEMINI_MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_KEY}`;
-
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`[Gemini] ${modelName} (attempt ${attempt})`);
-
-        const response = await fetchWithTimeout(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.4,
-              responseMimeType: 'application/json',
-              maxOutputTokens: 8192
-            }
-          })
-        }, 20000);
-
-        const rawText = await response.text();
-        let data;
-        try { data = JSON.parse(rawText); }
-        catch { lastError = 'NON_JSON'; break; }
-
-        if (!response.ok) {
-          const errMsg = data.error?.message || `HTTP ${response.status}`;
-          console.error(`[Gemini] Error ${response.status}: ${errMsg}`);
-
-          if (response.status === 503 || response.status === 429) {
-            lastError = `Gemini sibuk (${response.status})`;
-            if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
-            continue;
+    try {
+      console.log(`[Gemini] ${modelName}`);
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            responseMimeType: 'application/json',
+            maxOutputTokens: 8192
           }
-          if (response.status === 404) { lastError = 'Model tidak ada'; break; }
-          throw new Error(errMsg);
-        }
+        })
+      }, 12000); // 12 detik
 
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) throw new Error('Respons kosong');
-        console.log(`[Gemini] ✅ Sukses: ${modelName}`);
-        return text;
+      const rawText = await response.text();
+      let data;
+      try { data = JSON.parse(rawText); }
+      catch { lastError = `${modelName}: non-JSON`; continue; }
 
-      } catch (err) {
-        lastError = err.message;
-        console.error(`[Gemini] Exception: ${err.message}`);
-        if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+      if (!response.ok) {
+        const errMsg = data.error?.message || `HTTP ${response.status}`;
+        lastError = `${modelName}: ${errMsg}`;
+        console.error(`[Gemini] ${response.status}: ${errMsg}`);
+        continue; // Langsung model berikutnya (tanpa retry)
       }
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) { lastError = `${modelName}: kosong`; continue; }
+
+      console.log(`[Gemini] ✅ Sukses: ${modelName}`);
+      return text;
+
+    } catch (err) {
+      lastError = err.name === 'AbortError' ? `${modelName}: timeout` : `${modelName}: ${err.message}`;
+      console.error(`[Gemini] ${lastError}`);
     }
   }
 
   throw new Error(`Gemini gagal: ${lastError}`);
 }
 
-// ====== PROVIDER 2: GROQ ======
+// ====== PROVIDER 2: GROQ (timeout 15 detik) ======
 async function callGroq(prompt) {
   if (!GROQ_KEY) throw new Error('NO_KEY');
-
   let lastError = '';
 
   for (const modelName of GROQ_MODELS) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`[Groq] ${modelName} (attempt ${attempt})`);
+    try {
+      console.log(`[Groq] ${modelName}`);
+      const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${GROQ_KEY}`
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas JSON valid, tanpa markdown.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.4,
+          response_format: { type: 'json_object' },
+          max_tokens: 8000
+        })
+      }, 15000); // 15 detik
 
-        const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${GROQ_KEY}`
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas dengan JSON valid, tanpa markdown, tanpa teks tambahan.' },
-              { role: 'user', content: prompt }
-            ],
-            temperature: 0.4,
-            response_format: { type: 'json_object' },
-            max_tokens: 8000
-          })
-        }, 20000);
+      const rawText = await response.text();
+      let data;
+      try { data = JSON.parse(rawText); }
+      catch { lastError = `${modelName}: non-JSON`; continue; }
 
-        const rawText = await response.text();
-        let data;
-        try { data = JSON.parse(rawText); }
-        catch { lastError = 'NON_JSON'; break; }
-
-        if (!response.ok) {
-          const errMsg = data.error?.message || `HTTP ${response.status}`;
-          console.error(`[Groq] Error ${response.status}: ${errMsg}`);
-
-          if (response.status === 503 || response.status === 429) {
-            lastError = `Groq sibuk (${response.status})`;
-            if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
-            continue;
-          }
-          if (response.status === 404 || response.status === 400) {
-            lastError = `Model ${modelName} tidak valid`;
-            break;
-          }
-          throw new Error(errMsg);
-        }
-
-        const text = data.choices?.[0]?.message?.content;
-        if (!text) throw new Error('Respons kosong');
-        console.log(`[Groq] ✅ Sukses: ${modelName}`);
-        return text;
-
-      } catch (err) {
-        lastError = err.message;
-        console.error(`[Groq] Exception: ${err.message}`);
-        if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+      if (!response.ok) {
+        const errMsg = data.error?.message || `HTTP ${response.status}`;
+        lastError = `${modelName}: ${errMsg}`;
+        console.error(`[Groq] ${response.status}: ${errMsg}`);
+        continue;
       }
+
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) { lastError = `${modelName}: kosong`; continue; }
+
+      console.log(`[Groq] ✅ Sukses: ${modelName}`);
+      return text;
+
+    } catch (err) {
+      lastError = err.name === 'AbortError' ? `${modelName}: timeout` : `${modelName}: ${err.message}`;
+      console.error(`[Groq] ${lastError}`);
     }
   }
 
   throw new Error(`Groq gagal: ${lastError}`);
 }
 
-// ====== ORKESTRATOR: Coba semua provider berurutan ======
+// ====== ORKESTRATOR ======
 async function callAIWithFallback(prompt) {
   const providers = [
     { name: 'Gemini', fn: callGemini, hasKey: !!GEMINI_KEY },
@@ -225,35 +193,34 @@ async function callAIWithFallback(prompt) {
 
   for (const provider of providers) {
     if (!provider.hasKey) {
-      console.log(`[Fallback] Skip ${provider.name} (API key tidak ada)`);
-      errors.push(`${provider.name}: tidak ada API key`);
+      console.log(`[Fallback] Skip ${provider.name}`);
+      errors.push(`${provider.name}: no key`);
       continue;
     }
-
     try {
-      console.log(`[Fallback] === Mencoba provider: ${provider.name} ===`);
+      console.log(`[Fallback] === Coba ${provider.name} ===`);
       const result = await provider.fn(prompt);
-      console.log(`[Fallback] ✅ ${provider.name} berhasil!`);
+      console.log(`[Fallback] ✅ ${provider.name} OK`);
       return { text: result, provider: provider.name };
     } catch (err) {
-      console.warn(`[Fallback] ❌ ${provider.name} gagal: ${err.message}`);
+      console.warn(`[Fallback] ❌ ${provider.name}: ${err.message}`);
       errors.push(`${provider.name}: ${err.message}`);
     }
   }
 
-  throw new Error(`Semua AI sibuk. ${errors.join(' | ')}`);
+  throw new Error(`Semua AI gagal coba lagi nanti.`);
 }
 
-// ====== ENDPOINT GENERATE ======
+// ====== ENDPOINT ======
 app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
     const { text, jumlahSoal = 10 } = req.body;
 
     if (!text || text.trim().length < 30) {
-      return res.status(400).json({ error: 'Materi terlalu pendek atau kosong.' });
+      return res.status(400).json({ error: 'Materi terlalu pendek.' });
     }
     if (!GEMINI_KEY && !GROQ_KEY) {
-      return res.status(500).json({ error: 'Tidak ada API key yang dikonfigurasi.' });
+      return res.status(500).json({ error: 'Tidak ada API key.' });
     }
 
     const materi = text.slice(0, 25000);
@@ -272,24 +239,18 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
 
     res.json({ success: true, data: parsed, provider });
   } catch (err) {
-    console.error('Error generate:', err);
+    console.error('Error:', err);
     res.status(500).json({ error: err.message || 'Gagal generate soal.' });
   }
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    providers: {
-      gemini: !!GEMINI_KEY,
-      groq: !!GROQ_KEY
-    }
-  });
+  res.json({ status: 'ok', providers: { gemini: !!GEMINI_KEY, groq: !!GROQ_KEY } });
 });
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`✅ Server jalan di http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`✅ Server di http://localhost:${PORT}`));
 }
 
 module.exports = app;
