@@ -1,4 +1,4 @@
-// Nugas.AI - v4
+// Nugas.AI - v5
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -16,7 +16,7 @@ const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
 // ====== DAFTAR MODEL (VERSI TERBARU) ======
 const GEMINI_MODELS = ['gemini-3.8-flash'];
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
+const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
 // ====== PROMPT BUILDER ======
 function buildPrompt(materi, jumlahSoal) {
@@ -237,10 +237,11 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
   }
 });
 
+// ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    version: 'v4',
+    version: 'v5',
     providers: {
       gemini: !!GEMINI_KEY,
       groq: !!GROQ_KEY
