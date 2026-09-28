@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -10,17 +9,15 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// ====== GEMINI SETUP ======
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({
-  model: 'gemini-3.6-flash',
-  generationConfig: {
-    temperature: 0.4,
-    responseMimeType: 'application/json'
-  }
-});
+const API_KEY = process.env.GEMINI_API_KEY || '';
 
-// ====== PROMPT ADAPTIF ======
+// Daftar model yang dicoba berurutan (fallback)
+const MODEL_FALLBACKS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash'
+];
+
 const buildPrompt = (materi, jumlahSoal) => `
 Kamu adalah AI pembuat soal ujian yang AKURAT dan TELITI.
 
@@ -28,7 +25,7 @@ TUGAS: Analisis materi berikut, lalu hasilkan soal kuis pilihan ganda.
 
 ATURAN ANALISIS (WAJIB DIIKUTI):
 1. JIKA file berisi SOAL + PILIHAN GANDA + JAWABAN:
-   → Ekstrak PERSIS seperti di file (jangan ubah/ tambah)
+   → Ekstrak PERSIS seperti di file (jangan ubah/tambah)
    → Jumlah opsi jawaban IKUTI file (kalau hanya A-D, ya A-D saja)
    → Jawaban benar ikuti file
 
@@ -70,7 +67,70 @@ ${materi}
 """
 `;
 
-// ====== ENDPOINT: GENERATE SOAL ======
+// Fungsi panggil Gemini REST API dengan retry + fallback
+async function callGemini(prompt) {
+  let lastError = '';
+
+  for (const modelName of MODEL_FALLBACKS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[Gemini] Coba model: ${modelName} (attempt ${attempt})`);
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.4,
+              responseMimeType: 'application/json'
+            }
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          const errMsg = data.error?.message || `HTTP ${response.status}`;
+          console.error(`[Gemini] Error: ${errMsg}`);
+
+          // 503 / 429 → tunggu, retry
+          if (response.status === 503 || response.status === 429) {
+            lastError = `Server sibuk (${response.status}). Mencoba lagi...`;
+            await new Promise(r => setTimeout(r, 3000 * attempt));
+            continue;
+          }
+
+          // 404 → model tidak ada, langsung coba model berikutnya
+          if (response.status === 404) {
+            lastError = `Model ${modelName} tidak tersedia.`;
+            break; // keluar dari loop attempt, lanjut ke model berikutnya
+          }
+
+          throw new Error(errMsg);
+        }
+
+        // Sukses!
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error('Respons AI kosong.');
+
+        console.log(`[Gemini] Sukses pakai model: ${modelName}`);
+        return text;
+
+      } catch (err) {
+        lastError = err.message;
+        console.error(`[Gemini] Exception: ${err.message}`);
+        if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  throw new Error(lastError || 'Semua model gagal. Coba beberapa menit lagi.');
+}
+
+// Endpoint generate
 app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
     const { text, jumlahSoal = 10 } = req.body;
@@ -78,22 +138,19 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
     if (!text || text.trim().length < 30) {
       return res.status(400).json({ error: 'Materi terlalu pendek atau kosong.' });
     }
-    if (!process.env.GEMINI_API_KEY) {
+    if (!API_KEY) {
       return res.status(500).json({ error: 'GEMINI_API_KEY belum diset.' });
     }
 
-    // Batasi panjang teks biar tidak over token
     const materi = text.slice(0, 30000);
     const prompt = buildPrompt(materi, parseInt(jumlahSoal));
 
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text();
+    const raw = await callGemini(prompt);
 
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch (e) {
-      // fallback: cari JSON di dalam string
       const match = raw.match(/\{[\s\S]*\}/);
       if (match) parsed = JSON.parse(match[0]);
       else throw new Error('Format JSON dari AI tidak valid.');
@@ -106,9 +163,8 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
   }
 });
 
-// ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', gemini: !!process.env.GEMINI_API_KEY });
+  res.json({ status: 'ok', gemini: !!API_KEY });
 });
 
 const PORT = process.env.PORT || 3000;
