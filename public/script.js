@@ -235,7 +235,7 @@ function resetFileState(silent = false) {
 
   viewKuis.innerHTML = `<div class="welcome">
     <i data-lucide="graduation-cap" class="welcome-logo"></i>
-    <h1>BelajarAI</h1>
+    <h1>NugasAI</h1>
     <p class="welcome-sub">Upload file materi / soal untuk memulai</p>
     <div class="welcome-steps">
       <div class="step"><span class="step-num">1</span> Upload file materi / soal</div>
@@ -277,13 +277,13 @@ function switchTab(tab) {
     $('tabMateri').classList.remove('active');
     viewKuis.hidden = false;
     viewMateri.hidden = true;
-    $('breadcrumb').textContent = 'belajar-ai › kuis.json';
+    $('breadcrumb').textContent = 'nugas-ai › kuis.json';
   } else {
     $('tabMateri').classList.add('active');
     $('tabSoal').classList.remove('active');
     viewKuis.hidden = true;
     viewMateri.hidden = false;
-    $('breadcrumb').textContent = 'belajar-ai › materi.txt';
+    $('breadcrumb').textContent = 'nugas-ai › materi.txt';
   }
 }
 
@@ -591,6 +591,6 @@ function escapeHtml(str) {
 }
 
 // ====== INIT ======
-log('BelajarAI v1.0.0 siap digunakan.', 'ok');
+log('Nugas.AI v1 siap digunakan.', 'ok');
 log('Menunggu file di-upload...', 'dim');
 refreshIcons();
