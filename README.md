@@ -82,4 +82,4 @@ vercel.json         config deploy
 @apap09_ — https://instagram.com/apap09_
 
 Lisensi MIT. Pakai bebas.
-```
+
