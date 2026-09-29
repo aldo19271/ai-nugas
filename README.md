@@ -5,10 +5,6 @@ Website buat bikin soal latihan dari file materi. Upload PDF/DOCX/TXT, AI baca i
 
 Live: https://ai-nugas.vercel.app
 
-## Kenapa bikin ini
-
-Bosen baca materi berulang-ulang buat persiapan ujian. Daripada bikin soal sendiri, mending suruh AI.
-
 ## Cara pakai
 
 1. Buka website
@@ -19,11 +15,11 @@ Bosen baca materi berulang-ulang buat persiapan ujian. Daripada bikin soal sendi
 
 Kalau file cuma berisi materi, soal dibuat dari nol. Kalau file udah ada soal + pilihan ganda, ya langsung diambil.
 
-## Yang dipakai
+## Berisi
 
 - HTML, CSS, JavaScript (frontend)
 - Node.js + Express (backend)
-- Google Gemini + Groq (AI-nya pakai dua, biar kalau satu limit masih jalan)
+- Google Gemini + Groq
 - PDF.js sama Mammoth buat baca file
 - Di-deploy di Vercel
 
