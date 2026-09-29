@@ -13,13 +13,13 @@ Live: https://ai-nugas.vercel.app
 4. Klik Generate Kuis
 5. Kerjakan
 
-## Berisi
+## Pake apa saja
 
 - HTML, CSS, JavaScript (frontend)
 - Node.js + Express (backend)
 - Google Gemini + Groq
 - PDF.js dan Mammoth buat baca file
-- deploy di Vercel
+- Vercel
 
 ## Jalanin di lokal
 
