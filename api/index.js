@@ -186,7 +186,7 @@ async function callAIWithFallback(prompt) {
     }
   }
 
-  throw new Error('Semua AI gagal coba lagi nanti.');
+  throw new Error('Semua AI gagal (Token Limit) coba lagi nanti.');
 }
 
 // ====== PARSE JSON DARI RESPONS AI ======
