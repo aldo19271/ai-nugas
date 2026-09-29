@@ -1,4 +1,4 @@
-// Nugas.AI - v5
+// Nugas.AI - v7
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -10,31 +10,30 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// ====== API KEYS ======
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
-// ====== DAFTAR MODEL (VERSI TERBARU) ======
 const GEMINI_MODELS = ['gemini-3.8-flash'];
 const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
-// ====== PROMPT BUILDER ======
+// Batch size: max soal per request (biar output tidak terlalu besar)
+const BATCH_SIZE = 15;
+
 function buildPrompt(materi, jumlahSoal) {
   return 'Kamu adalah AI pembuat soal ujian yang AKURAT dan TELITI.\n\n' +
     'TUGAS: Analisis materi berikut, lalu hasilkan soal kuis pilihan ganda.\n\n' +
-    'ATURAN ANALISIS (WAJIB DIIKUTI):\n' +
+    'ATURAN ANALISIS:\n' +
     '1. JIKA file berisi SOAL + PILIHAN GANDA + JAWABAN:\n' +
-    '   -> Ekstrak PERSIS seperti di file (jangan ubah/tambah)\n' +
-    '   -> Jumlah opsi jawaban IKUTI file (kalau hanya A-D, ya A-D saja)\n' +
-    '   -> Jawaban benar ikuti file\n\n' +
-    '2. JIKA file berisi SOAL saja (tanpa pilihan ganda):\n' +
+    '   -> Ekstrak PERSIS seperti di file\n' +
+    '   -> Jumlah opsi jawaban IKUTI file\n' +
+    '   -> WAJIB: Sertakan field "penjelasan" (1-2 kalimat)\n\n' +
+    '2. JIKA file berisi SOAL saja:\n' +
     '   -> Buatkan pilihan ganda A-E sendiri\n' +
-    '   -> Tentukan jawaban yang paling benar\n\n' +
-    '3. JIKA file berisi MATERI saja (tanpa soal):\n' +
-    '   -> Buatkan ' + jumlahSoal + ' soal pilihan ganda A-E\n' +
-    '   -> Soal harus menguji pemahaman materi\n' +
-    '   -> Sertakan penjelasan singkat\n\n' +
-    'FORMAT OUTPUT (HANYA JSON, tanpa markdown, tanpa penjelasan tambahan):\n' +
+    '   -> WAJIB: Sertakan field "penjelasan"\n\n' +
+    '3. JIKA file berisi MATERI saja:\n' +
+    '   -> Buatkan TEPAT ' + jumlahSoal + ' SOAL. Tidak kurang, tidak lebih.\n' +
+    '   -> Setiap soal WAJIB punya field "penjelasan" (1-2 kalimat)\n\n' +
+    'FORMAT OUTPUT (HANYA JSON, tanpa markdown):\n' +
     '{\n' +
     '  "mode": "ekstrak" | "buat_soal" | "buat_dari_materi",\n' +
     '  "jumlah_opsi": 4 atau 5,\n' +
@@ -42,15 +41,9 @@ function buildPrompt(materi, jumlahSoal) {
     '  "soal": [\n' +
     '    {\n' +
     '      "pertanyaan": "Teks pertanyaan",\n' +
-    '      "pilihan": {\n' +
-    '        "A": "teks A",\n' +
-    '        "B": "teks B",\n' +
-    '        "C": "teks C",\n' +
-    '        "D": "teks D",\n' +
-    '        "E": "teks E"\n' +
-    '      },\n' +
+    '      "pilihan": { "A": "...", "B": "...", "C": "...", "D": "...", "E": "..." },\n' +
     '      "jawaban_benar": "B",\n' +
-    '      "penjelasan": "Penjelasan singkat (1-2 kalimat)"\n' +
+    '      "penjelasan": "Penjelasan singkat"\n' +
     '    }\n' +
     '  ]\n' +
     '}\n\n' +
@@ -58,7 +51,6 @@ function buildPrompt(materi, jumlahSoal) {
     'MATERI:\n"""\n' + materi + '\n"""\n';
 }
 
-// ====== FETCH DENGAN TIMEOUT ======
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -70,7 +62,6 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-// ====== PROVIDER 1: GEMINI ======
 async function callGemini(prompt) {
   if (!GEMINI_KEY) throw new Error('NO_KEY');
   let lastError = '';
@@ -119,7 +110,6 @@ async function callGemini(prompt) {
   throw new Error('Gemini gagal: ' + lastError);
 }
 
-// ====== PROVIDER 2: GROQ ======
 async function callGroq(prompt) {
   if (!GROQ_KEY) throw new Error('NO_KEY');
   let lastError = '';
@@ -136,10 +126,10 @@ async function callGroq(prompt) {
         body: JSON.stringify({
           model: modelName,
           messages: [
-            { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas JSON valid, tanpa markdown.' },
+            { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas JSON valid. WAJIB patuhi jumlah soal yang diminta PERSIS.' },
             { role: 'user', content: prompt }
           ],
-          temperature: 0.4,
+          temperature: 0.3,
           response_format: { type: 'json_object' },
           max_tokens: 8000
         })
@@ -172,7 +162,6 @@ async function callGroq(prompt) {
   throw new Error('Groq gagal: ' + lastError);
 }
 
-// ====== ORKESTRATOR ======
 async function callAIWithFallback(prompt) {
   const providers = [
     { name: 'Gemini', fn: callGemini, hasKey: !!GEMINI_KEY },
@@ -183,7 +172,6 @@ async function callAIWithFallback(prompt) {
 
   for (const provider of providers) {
     if (!provider.hasKey) {
-      console.log('[Fallback] Skip ' + provider.name);
       errors.push(provider.name + ': no key');
       continue;
     }
@@ -201,11 +189,106 @@ async function callAIWithFallback(prompt) {
   throw new Error('Semua AI gagal coba lagi nanti.');
 }
 
+// ====== PARSE JSON DARI RESPONS AI ======
+function parseAIResponse(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error('Format JSON dari AI tidak valid.');
+  }
+}
+
+// ====== GENERATE DENGAN BATCHING ======
+async function generateWithBatching(materi, jumlahSoalDiminta) {
+  // Kalau ≤ BATCH_SIZE, langsung satu request
+  if (jumlahSoalDiminta <= BATCH_SIZE) {
+    const prompt = buildPrompt(materi, jumlahSoalDiminta);
+    const result = await callAIWithFallback(prompt);
+    const parsed = parseAIResponse(result.text);
+
+    // Validasi + fallback penjelasan
+    if (parsed.soal && Array.isArray(parsed.soal)) {
+      if (parsed.mode === 'buat_dari_materi' && parsed.soal.length > jumlahSoalDiminta) {
+        parsed.soal = parsed.soal.slice(0, jumlahSoalDiminta);
+      }
+      parsed.soal = parsed.soal.map(s => {
+        if (!s.penjelasan || s.penjelasan.trim() === '') {
+          s.penjelasan = 'Jawaban yang benar adalah ' + s.jawaban_benar + '.';
+        }
+        return s;
+      });
+    }
+
+    return { data: parsed, provider: result.provider };
+  }
+
+  // > BATCH_SIZE: pecah jadi beberapa batch
+  console.log('[Batch] Memecah ' + jumlahSoalDiminta + ' soal jadi batch @' + BATCH_SIZE);
+
+  const batches = [];
+  let sisa = jumlahSoalDiminta;
+  while (sisa > 0) {
+    const n = Math.min(sisa, BATCH_SIZE);
+    batches.push(n);
+    sisa -= n;
+  }
+
+  const semuaSoal = [];
+  let providerTerakhir = '';
+  let modeTerakhir = '';
+  let judulTerakhir = '';
+  let jumlahOpsiTerakhir = 5;
+
+  for (let i = 0; i < batches.length; i++) {
+    const n = batches[i];
+    console.log('[Batch] ' + (i + 1) + '/' + batches.length + ' → ' + n + ' soal');
+
+    const prompt = buildPrompt(materi, n);
+    const result = await callAIWithFallback(prompt);
+    const parsed = parseAIResponse(result.text);
+
+    if (parsed.soal && Array.isArray(parsed.soal)) {
+      // Ambil hanya sebanyak n (untuk safety)
+      const ambil = parsed.soal.slice(0, n);
+      semuaSoal.push(...ambil);
+    }
+
+    providerTerakhir = result.provider;
+    modeTerakhir = parsed.mode || 'buat_dari_materi';
+    judulTerakhir = parsed.judul || 'Kuis Latihan';
+    jumlahOpsiTerakhir = parsed.jumlah_opsi || 5;
+  }
+
+  // Potong kalau over
+  if (semuaSoal.length > jumlahSoalDiminta) {
+    semuaSoal.splice(jumlahSoalDiminta);
+  }
+
+  // Fallback penjelasan
+  semuaSoal.forEach(s => {
+    if (!s.penjelasan || s.penjelasan.trim() === '') {
+      s.penjelasan = 'Jawaban yang benar adalah ' + s.jawaban_benar + '.';
+    }
+  });
+
+  return {
+    data: {
+      mode: modeTerakhir,
+      jumlah_opsi: jumlahOpsiTerakhir,
+      judul: judulTerakhir,
+      soal: semuaSoal
+    },
+    provider: providerTerakhir
+  };
+}
+
 // ====== ENDPOINT ======
 app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
     const text = req.body.text;
-    const jumlahSoal = req.body.jumlahSoal || 10;
+    const jumlahSoalDiminta = parseInt(req.body.jumlahSoal) || 10;
 
     if (!text || text.trim().length < 30) {
       return res.status(400).json({ error: 'Materi terlalu pendek.' });
@@ -215,33 +298,20 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
     }
 
     const materi = text.slice(0, 25000);
-    const prompt = buildPrompt(materi, parseInt(jumlahSoal));
 
-    const result = await callAIWithFallback(prompt);
-    const raw = result.text;
-    const provider = result.provider;
+    const result = await generateWithBatching(materi, jumlahSoalDiminta);
 
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
-      else throw new Error('Format JSON dari AI tidak valid.');
-    }
-
-    res.json({ success: true, data: parsed, provider: provider });
+    res.json({ success: true, data: result.data, provider: result.provider });
   } catch (err) {
     console.error('Error:', err);
     res.status(500).json({ error: err.message || 'Gagal generate soal.' });
   }
 });
 
-// ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    version: 'v5',
+    version: 'v7',
     providers: {
       gemini: !!GEMINI_KEY,
       groq: !!GROQ_KEY
