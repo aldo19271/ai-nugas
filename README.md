@@ -1,4 +1,4 @@
-``` markdown
+```
 # Nugas.AI
 
 Website buat bikin soal latihan dari file materi. Upload PDF/DOCX/TXT, AI baca isinya, terus dikasih soal pilihan ganda.
