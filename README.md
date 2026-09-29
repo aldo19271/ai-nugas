@@ -79,7 +79,8 @@ vercel.json         config deploy
 
 ## Creator
 
-al \n https://instagram.com/apap09_
+al 
+https://www.instagram.com/apap09_?stkn=MXd2YjRybTFzcnFybA==
 
 Lisensi MIT. Pakai bebas.
 
