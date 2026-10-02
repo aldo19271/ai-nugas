@@ -1,4 +1,4 @@
-// Nugas.AI - v9 (auto-sync provider)
+// Nugas.AI - v10 (dropdown pakai nama model)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -13,8 +13,10 @@ app.use(express.json({ limit: '10mb' }));
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
+// Daftar model per provider
 const GEMINI_MODELS = ['gemini-3.8-flash'];
 const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+
 const BATCH_SIZE = 15;
 
 function buildPrompt(materi, jumlahSoal) {
@@ -61,10 +63,12 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 // ====== GEMINI ======
-async function callGemini(prompt) {
+async function callGemini(prompt, specificModel) {
   if (!GEMINI_KEY) throw new Error('NO_KEY');
+  const models = specificModel ? [specificModel] : GEMINI_MODELS;
   let lastError = '';
-  for (const modelName of GEMINI_MODELS) {
+
+  for (const modelName of models) {
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + GEMINI_KEY;
     try {
       console.log('[Gemini] ' + modelName);
@@ -106,10 +110,12 @@ async function callGemini(prompt) {
 }
 
 // ====== GROQ ======
-async function callGroq(prompt) {
+async function callGroq(prompt, specificModel) {
   if (!GROQ_KEY) throw new Error('NO_KEY');
+  const models = specificModel ? [specificModel] : GROQ_MODELS;
   let lastError = '';
-  for (const modelName of GROQ_MODELS) {
+
+  for (const modelName of models) {
     try {
       console.log('[Groq] ' + modelName);
       const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
@@ -155,45 +161,65 @@ async function callGroq(prompt) {
 }
 
 // ==================================================
-// ====== DAFTAR PROVIDER (AUTO-SYNC KE FRONTEND) ======
+// ====== DAFTAR MODEL (AUTO-SYNC KE FRONTEND) ======
 // ==================================================
-// Untuk tambah provider baru, cukup tambah 1 baris di array ini.
-// Format: { id: 'NamaUnik', label: 'Nama Tampil', fn: fungsiCall, hasKey: boolean }
 function getAvailableProviders() {
-  const list = [
-    { id: 'Gemini', label: 'Gemini', fn: callGemini, hasKey: !!GEMINI_KEY },
-    { id: 'Groq', label: 'Groq', fn: callGroq, hasKey: !!GROQ_KEY },
-    // Contoh tambah provider baru (kalau sudah ada fungsi callX):
-    // { id: 'Cerebras', label: 'Cerebras', fn: callCerebras, hasKey: !!CEREBRAS_KEY },
-  ];
-  return list.filter(p => p.hasKey);
+  const list = [];
+
+  if (GEMINI_KEY) {
+    GEMINI_MODELS.forEach(m => {
+      list.push({
+        id: m,
+        label: m,
+        provider: 'Gemini',
+        fn: (prompt) => callGemini(prompt, m),
+        hasKey: true
+      });
+    });
+  }
+
+  if (GROQ_KEY) {
+    GROQ_MODELS.forEach(m => {
+      list.push({
+        id: m,
+        label: m,
+        provider: 'Groq',
+        fn: (prompt) => callGroq(prompt, m),
+        hasKey: true
+      });
+    });
+  }
+
+  return list;
 }
 
-// Endpoint untuk frontend: dapatkan daftar provider aktif
+// Endpoint untuk frontend: dapatkan daftar model aktif
 app.get('/api/providers', (req, res) => {
-  const providers = getAvailableProviders().map(p => ({ id: p.id, label: p.label }));
+  const providers = getAvailableProviders().map(p => ({
+    id: p.id,
+    label: p.label,
+    provider: p.provider
+  }));
   res.json({ providers });
 });
 
-// Panggil provider yang dipilih user
-async function callAIWithProvider(prompt, providerId) {
+// Panggil model yang dipilih user
+async function callAIWithProvider(prompt, modelId) {
   const providers = getAvailableProviders();
 
   if (providers.length === 0) {
-    throw new Error('Tidak ada provider AI yang tersedia.');
+    throw new Error('Tidak ada model AI yang tersedia.');
   }
 
-  // Cari provider sesuai pilihan user
-  let provider = providers.find(p => p.id === providerId);
+  let provider = providers.find(p => p.id === modelId);
 
-  // Kalau provider tidak ditemukan, pakai provider pertama sebagai fallback
   if (!provider) {
-    console.warn('[Provider] "' + providerId + '" tidak ditemukan, pakai default: ' + providers[0].id);
+    console.warn('[Model] "' + modelId + '" tidak ditemukan, pakai default: ' + providers[0].id);
     provider = providers[0];
   }
 
   const result = await provider.fn(prompt);
-  return { text: result, provider: provider.id };
+  return { text: result, provider: provider.id, providerName: provider.provider };
 }
 
 // ====== PARSE JSON ======
@@ -208,10 +234,10 @@ function parseAIResponse(raw) {
 }
 
 // ====== GENERATE DENGAN BATCHING ======
-async function generateWithBatching(materi, jumlahSoalDiminta, providerId) {
+async function generateWithBatching(materi, jumlahSoalDiminta, modelId) {
   if (jumlahSoalDiminta <= BATCH_SIZE) {
     const prompt = buildPrompt(materi, jumlahSoalDiminta);
-    const result = await callAIWithProvider(prompt, providerId);
+    const result = await callAIWithProvider(prompt, modelId);
     const parsed = parseAIResponse(result.text);
 
     if (parsed.soal && Array.isArray(parsed.soal)) {
@@ -225,7 +251,7 @@ async function generateWithBatching(materi, jumlahSoalDiminta, providerId) {
         return s;
       });
     }
-    return { data: parsed, provider: result.provider };
+    return { data: parsed, provider: result.provider, providerName: result.providerName };
   }
 
   console.log('[Batch] Memecah ' + jumlahSoalDiminta + ' soal jadi batch @' + BATCH_SIZE);
@@ -240,6 +266,7 @@ async function generateWithBatching(materi, jumlahSoalDiminta, providerId) {
 
   const semuaSoal = [];
   let providerTerakhir = '';
+  let providerNameTerakhir = '';
   let modeTerakhir = '';
   let judulTerakhir = '';
   let jumlahOpsiTerakhir = 5;
@@ -249,7 +276,7 @@ async function generateWithBatching(materi, jumlahSoalDiminta, providerId) {
     console.log('[Batch] ' + (i + 1) + '/' + batches.length + ' → ' + n + ' soal');
 
     const prompt = buildPrompt(materi, n);
-    const result = await callAIWithProvider(prompt, providerId);
+    const result = await callAIWithProvider(prompt, modelId);
     const parsed = parseAIResponse(result.text);
 
     if (parsed.soal && Array.isArray(parsed.soal)) {
@@ -257,6 +284,7 @@ async function generateWithBatching(materi, jumlahSoalDiminta, providerId) {
     }
 
     providerTerakhir = result.provider;
+    providerNameTerakhir = result.providerName;
     modeTerakhir = parsed.mode || 'buat_dari_materi';
     judulTerakhir = parsed.judul || 'Kuis Latihan';
     jumlahOpsiTerakhir = parsed.jumlah_opsi || 5;
@@ -279,7 +307,8 @@ async function generateWithBatching(materi, jumlahSoalDiminta, providerId) {
       judul: judulTerakhir,
       soal: semuaSoal
     },
-    provider: providerTerakhir
+    provider: providerTerakhir,
+    providerName: providerNameTerakhir
   };
 }
 
@@ -288,7 +317,7 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
     const text = req.body.text;
     const jumlahSoalDiminta = parseInt(req.body.jumlahSoal) || 10;
-    const provider = req.body.provider || 'Gemini';
+    const modelId = req.body.provider || 'gemini-3.8-flash';
 
     if (!text || text.trim().length < 30) {
       return res.status(400).json({ error: 'Materi terlalu pendek.' });
@@ -298,9 +327,14 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
     }
 
     const materi = text.slice(0, 25000);
-    const result = await generateWithBatching(materi, jumlahSoalDiminta, provider);
+    const result = await generateWithBatching(materi, jumlahSoalDiminta, modelId);
 
-    res.json({ success: true, data: result.data, provider: result.provider });
+    res.json({
+      success: true,
+      data: result.data,
+      provider: result.provider,
+      providerName: result.providerName
+    });
   } catch (err) {
     console.error('Error:', err);
     res.status(500).json({ error: err.message || 'Gagal generate soal.' });
@@ -309,11 +343,11 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
 
 // ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
-  const providers = getAvailableProviders().map(p => p.id);
+  const models = getAvailableProviders().map(p => p.id);
   res.json({
     status: 'ok',
-    version: 'v9',
-    providers: providers
+    version: 'v10',
+    models: models
   });
 });
 
