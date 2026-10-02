@@ -25,10 +25,47 @@ const fileRemove = $('fileRemove');
 const sidebar = $('sidebar');
 const overlay = $('overlay');
 const panel = $('panel');
+const aiProvider = $('aiProvider');
 
 // ====== LUCIDE HELPER ======
 function refreshIcons() {
   if (window.lucide) window.lucide.createIcons();
+}
+
+// ==================================================
+// ====== LOAD PROVIDERS DARI BACKEND ======
+// ==================================================
+async function loadProviders() {
+  try {
+    const res = await fetch('/api/providers');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    if (!data.providers || data.providers.length === 0) {
+      aiProvider.innerHTML = '<option value="">Tidak ada provider</option>';
+      log('Tidak ada provider AI yang tersedia.', 'err');
+      return;
+    }
+
+    // Kosongkan dropdown, isi dari backend
+    aiProvider.innerHTML = '';
+    data.providers.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.label;
+      aiProvider.appendChild(opt);
+    });
+
+    // Default: pilih provider pertama (biasanya Gemini)
+    aiProvider.value = data.providers[0].id;
+
+    log('Provider tersedia: ' + data.providers.map(p => p.label).join(', '), 'ok');
+  } catch (err) {
+    console.warn('Gagal load providers:', err);
+    // Fallback: isi manual dengan default
+    aiProvider.innerHTML = '<option value="Gemini">Gemini</option>';
+    log('Gagal memuat daftar provider. Pakai default.', 'warn');
+  }
 }
 
 // ====== MOBILE DRAWER ======
@@ -235,9 +272,9 @@ function resetFileState(silent = false) {
   viewKuis.innerHTML = `<div class="welcome">
     <i data-lucide="graduation-cap" class="welcome-logo"></i>
     <h1>Nugas.AI</h1>
-    <p class="welcome-sub">Upload file materi untuk memulai</p>
+    <p class="welcome-sub">Upload file materi / soal untuk memulai</p>
     <div class="welcome-steps">
-      <div class="step"><span class="step-num">1</span> Buka Garis 3 Sebelah Kiri Atas, Lalu Upload file materi</div>
+      <div class="step"><span class="step-num">1</span> Buka Garis 3 Sebelah Kiri Atas, Lalu Upload file materi / soal</div>
       <div class="step"><span class="step-num">2</span> Klik <b>Generate Kuis</b></div>
       <div class="step"><span class="step-num">3</span> Kerjakan kuis</div>
     </div>
@@ -355,16 +392,18 @@ async function parseDOCX(file) {
 // ====== GENERATE ======
 btnGenerate.onclick = async () => {
   const jumlahSoal = parseInt($('jumlahSoal').value) || 10;
+  const provider = aiProvider.value || 'Gemini';
+
   btnGenerate.disabled = true;
   btnGenerate.innerHTML = '<span class="spinner"></span> Memproses...';
   setStatus('AI menganalisis...', 'yellow');
-  log('Diproses ke AI...', 'warn');
+  log(`Diproses ke AI (${provider})...`, 'warn');
 
   try {
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: state.materiText, jumlahSoal })
+      body: JSON.stringify({ text: state.materiText, jumlahSoal, provider })
     });
 
     const rawText = await res.text();
@@ -386,8 +425,7 @@ btnGenerate.onclick = async () => {
     state.currentIndex = 0;
     state.jawabanUser = [];
 
-    // Tampilkan provider yang dipakai
-    log(`AI selesai via ${json.provider || 'AI'}! Mode: ${json.data.mode}`, 'ok');
+    log(`AI selesai via ${json.provider || provider}! Mode: ${json.data.mode}`, 'ok');
     log(`${json.data.soal.length} soal berhasil dibuat.`, 'ok');
 
     switchTab('kuis');
@@ -599,3 +637,4 @@ function escapeHtml(str) {
 log('Nugas.AI v1 siap digunakan.', 'ok');
 log('Menunggu file di-upload...', 'dim');
 refreshIcons();
+loadProviders(); // Load daftar provider dari backend
