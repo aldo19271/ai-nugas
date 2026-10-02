@@ -1,4 +1,4 @@
-// Nugas.AI - v7
+// Nugas.AI - v9 (auto-sync provider)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -15,8 +15,6 @@ const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
 const GEMINI_MODELS = ['gemini-3.8-flash'];
 const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
-
-// Batch size: max soal per request (biar output tidak terlalu besar)
 const BATCH_SIZE = 15;
 
 function buildPrompt(materi, jumlahSoal) {
@@ -62,10 +60,10 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+// ====== GEMINI ======
 async function callGemini(prompt) {
   if (!GEMINI_KEY) throw new Error('NO_KEY');
   let lastError = '';
-
   for (const modelName of GEMINI_MODELS) {
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + GEMINI_KEY;
     try {
@@ -81,12 +79,11 @@ async function callGemini(prompt) {
             maxOutputTokens: 8192
           }
         })
-      }, 12000);
+      }, 15000);
 
       const rawText = await response.text();
       let data;
-      try { data = JSON.parse(rawText); }
-      catch (e) { lastError = modelName + ': non-JSON'; continue; }
+      try { data = JSON.parse(rawText); } catch (e) { lastError = modelName + ': non-JSON'; continue; }
 
       if (!response.ok) {
         const errMsg = (data.error && data.error.message) || ('HTTP ' + response.status);
@@ -100,20 +97,18 @@ async function callGemini(prompt) {
 
       console.log('[Gemini] OK: ' + modelName);
       return text;
-
     } catch (err) {
       lastError = err.name === 'AbortError' ? (modelName + ': timeout') : (modelName + ': ' + err.message);
       console.error('[Gemini] ' + lastError);
     }
   }
-
   throw new Error('Gemini gagal: ' + lastError);
 }
 
+// ====== GROQ ======
 async function callGroq(prompt) {
   if (!GROQ_KEY) throw new Error('NO_KEY');
   let lastError = '';
-
   for (const modelName of GROQ_MODELS) {
     try {
       console.log('[Groq] ' + modelName);
@@ -126,19 +121,18 @@ async function callGroq(prompt) {
         body: JSON.stringify({
           model: modelName,
           messages: [
-            { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas JSON valid. WAJIB patuhi jumlah soal yang diminta PERSIS.' },
+            { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas JSON valid. WAJIB patuhi jumlah soal PERSIS.' },
             { role: 'user', content: prompt }
           ],
           temperature: 0.3,
           response_format: { type: 'json_object' },
           max_tokens: 8000
         })
-      }, 15000);
+      }, 20000);
 
       const rawText = await response.text();
       let data;
-      try { data = JSON.parse(rawText); }
-      catch (e) { lastError = modelName + ': non-JSON'; continue; }
+      try { data = JSON.parse(rawText); } catch (e) { lastError = modelName + ': non-JSON'; continue; }
 
       if (!response.ok) {
         const errMsg = (data.error && data.error.message) || ('HTTP ' + response.status);
@@ -152,44 +146,57 @@ async function callGroq(prompt) {
 
       console.log('[Groq] OK: ' + modelName);
       return text;
-
     } catch (err) {
       lastError = err.name === 'AbortError' ? (modelName + ': timeout') : (modelName + ': ' + err.message);
       console.error('[Groq] ' + lastError);
     }
   }
-
   throw new Error('Groq gagal: ' + lastError);
 }
 
-async function callAIWithFallback(prompt) {
-  const providers = [
-    { name: 'Gemini', fn: callGemini, hasKey: !!GEMINI_KEY },
-    { name: 'Groq', fn: callGroq, hasKey: !!GROQ_KEY }
+// ==================================================
+// ====== DAFTAR PROVIDER (AUTO-SYNC KE FRONTEND) ======
+// ==================================================
+// Untuk tambah provider baru, cukup tambah 1 baris di array ini.
+// Format: { id: 'NamaUnik', label: 'Nama Tampil', fn: fungsiCall, hasKey: boolean }
+function getAvailableProviders() {
+  const list = [
+    { id: 'Gemini', label: 'Gemini', fn: callGemini, hasKey: !!GEMINI_KEY },
+    { id: 'Groq', label: 'Groq', fn: callGroq, hasKey: !!GROQ_KEY },
+    // Contoh tambah provider baru (kalau sudah ada fungsi callX):
+    // { id: 'Cerebras', label: 'Cerebras', fn: callCerebras, hasKey: !!CEREBRAS_KEY },
   ];
-
-  const errors = [];
-
-  for (const provider of providers) {
-    if (!provider.hasKey) {
-      errors.push(provider.name + ': no key');
-      continue;
-    }
-    try {
-      console.log('[Fallback] === Coba ' + provider.name + ' ===');
-      const result = await provider.fn(prompt);
-      console.log('[Fallback] ' + provider.name + ' OK');
-      return { text: result, provider: provider.name };
-    } catch (err) {
-      console.warn('[Fallback] ' + provider.name + ': ' + err.message);
-      errors.push(provider.name + ': ' + err.message);
-    }
-  }
-
-  throw new Error('Semua AI gagal (Token Limit) coba lagi nanti.');
+  return list.filter(p => p.hasKey);
 }
 
-// ====== PARSE JSON DARI RESPONS AI ======
+// Endpoint untuk frontend: dapatkan daftar provider aktif
+app.get('/api/providers', (req, res) => {
+  const providers = getAvailableProviders().map(p => ({ id: p.id, label: p.label }));
+  res.json({ providers });
+});
+
+// Panggil provider yang dipilih user
+async function callAIWithProvider(prompt, providerId) {
+  const providers = getAvailableProviders();
+
+  if (providers.length === 0) {
+    throw new Error('Tidak ada provider AI yang tersedia.');
+  }
+
+  // Cari provider sesuai pilihan user
+  let provider = providers.find(p => p.id === providerId);
+
+  // Kalau provider tidak ditemukan, pakai provider pertama sebagai fallback
+  if (!provider) {
+    console.warn('[Provider] "' + providerId + '" tidak ditemukan, pakai default: ' + providers[0].id);
+    provider = providers[0];
+  }
+
+  const result = await provider.fn(prompt);
+  return { text: result, provider: provider.id };
+}
+
+// ====== PARSE JSON ======
 function parseAIResponse(raw) {
   try {
     return JSON.parse(raw);
@@ -201,14 +208,12 @@ function parseAIResponse(raw) {
 }
 
 // ====== GENERATE DENGAN BATCHING ======
-async function generateWithBatching(materi, jumlahSoalDiminta) {
-  // Kalau ≤ BATCH_SIZE, langsung satu request
+async function generateWithBatching(materi, jumlahSoalDiminta, providerId) {
   if (jumlahSoalDiminta <= BATCH_SIZE) {
     const prompt = buildPrompt(materi, jumlahSoalDiminta);
-    const result = await callAIWithFallback(prompt);
+    const result = await callAIWithProvider(prompt, providerId);
     const parsed = parseAIResponse(result.text);
 
-    // Validasi + fallback penjelasan
     if (parsed.soal && Array.isArray(parsed.soal)) {
       if (parsed.mode === 'buat_dari_materi' && parsed.soal.length > jumlahSoalDiminta) {
         parsed.soal = parsed.soal.slice(0, jumlahSoalDiminta);
@@ -220,11 +225,9 @@ async function generateWithBatching(materi, jumlahSoalDiminta) {
         return s;
       });
     }
-
     return { data: parsed, provider: result.provider };
   }
 
-  // > BATCH_SIZE: pecah jadi beberapa batch
   console.log('[Batch] Memecah ' + jumlahSoalDiminta + ' soal jadi batch @' + BATCH_SIZE);
 
   const batches = [];
@@ -246,13 +249,11 @@ async function generateWithBatching(materi, jumlahSoalDiminta) {
     console.log('[Batch] ' + (i + 1) + '/' + batches.length + ' → ' + n + ' soal');
 
     const prompt = buildPrompt(materi, n);
-    const result = await callAIWithFallback(prompt);
+    const result = await callAIWithProvider(prompt, providerId);
     const parsed = parseAIResponse(result.text);
 
     if (parsed.soal && Array.isArray(parsed.soal)) {
-      // Ambil hanya sebanyak n (untuk safety)
-      const ambil = parsed.soal.slice(0, n);
-      semuaSoal.push(...ambil);
+      semuaSoal.push(...parsed.soal.slice(0, n));
     }
 
     providerTerakhir = result.provider;
@@ -261,12 +262,10 @@ async function generateWithBatching(materi, jumlahSoalDiminta) {
     jumlahOpsiTerakhir = parsed.jumlah_opsi || 5;
   }
 
-  // Potong kalau over
   if (semuaSoal.length > jumlahSoalDiminta) {
     semuaSoal.splice(jumlahSoalDiminta);
   }
 
-  // Fallback penjelasan
   semuaSoal.forEach(s => {
     if (!s.penjelasan || s.penjelasan.trim() === '') {
       s.penjelasan = 'Jawaban yang benar adalah ' + s.jawaban_benar + '.';
@@ -284,22 +283,22 @@ async function generateWithBatching(materi, jumlahSoalDiminta) {
   };
 }
 
-// ====== ENDPOINT ======
+// ====== ENDPOINT GENERATE ======
 app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
     const text = req.body.text;
     const jumlahSoalDiminta = parseInt(req.body.jumlahSoal) || 10;
+    const provider = req.body.provider || 'Gemini';
 
     if (!text || text.trim().length < 30) {
       return res.status(400).json({ error: 'Materi terlalu pendek.' });
     }
-    if (!GEMINI_KEY && !GROQ_KEY) {
-      return res.status(500).json({ error: 'Tidak ada API key.' });
+    if (getAvailableProviders().length === 0) {
+      return res.status(500).json({ error: 'Tidak ada API key yang dikonfigurasi.' });
     }
 
     const materi = text.slice(0, 25000);
-
-    const result = await generateWithBatching(materi, jumlahSoalDiminta);
+    const result = await generateWithBatching(materi, jumlahSoalDiminta, provider);
 
     res.json({ success: true, data: result.data, provider: result.provider });
   } catch (err) {
@@ -308,14 +307,13 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
   }
 });
 
+// ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
+  const providers = getAvailableProviders().map(p => p.id);
   res.json({
     status: 'ok',
-    version: 'v7',
-    providers: {
-      gemini: !!GEMINI_KEY,
-      groq: !!GROQ_KEY
-    }
+    version: 'v9',
+    providers: providers
   });
 });
 
