@@ -341,7 +341,8 @@ i[data-lucide], svg.lucide {
   color: var(--text-dim);
   margin-bottom: 4px;
 }
-.setting-item input {
+.setting-item input,
+.setting-item select {
   width: 100%;
   background: #1e1e1e;
   border: 1px solid var(--border);
@@ -352,7 +353,10 @@ i[data-lucide], svg.lucide {
   font-size: 12px;
   outline: none;
 }
-.setting-item input:focus { border-color: var(--accent); }
+.setting-item input:focus,
+.setting-item select:focus {
+  border-color: var(--accent);
+}
 
 /* BUTTON */
 .btn-primary {
