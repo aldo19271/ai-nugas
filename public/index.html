@@ -9,8 +9,96 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <!-- ===== LOADING SCREEN CSS ===== -->
+  <style>
+    #loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0a;
+      transition: opacity 0.8s ease, transform 0.8s ease, filter 0.8s ease;
+    }
+    #loader.hide {
+      opacity: 0;
+      transform: scale(1.05);
+      filter: blur(8px);
+      pointer-events: none;
+    }
+    .wandering-eyes {
+      --size: min(45vw, 220px);
+      --eye-scale: 0.62;
+      --gap-scale: 0.09;
+      --pupil-scale: 0.32;
+      --blink-scale: 0.375;
+      --travel-scale: 0.3125;
+      --color: #f5f5f5;
+      --eye-size: calc(var(--size) * var(--eye-scale) * 4 / 9);
+      --gap-size: calc(var(--size) * var(--gap-scale) * 4 / 9);
+      --travel: calc(var(--eye-size) * var(--travel-scale));
+      --blink: var(--blink-scale);
+      --duration: 4.5s;
+      --eye-color: color-mix(in srgb, var(--color) 16%, transparent);
+      --pupil-color: var(--color);
+      width: var(--size);
+      height: calc(var(--size) * 4 / 9);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .eyes-inner {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--gap-size);
+    }
+    .eye {
+      display: inline-block;
+      border-radius: 9999px;
+      width: var(--eye-size);
+      height: var(--eye-size);
+      background-color: var(--eye-color);
+      background-image: radial-gradient(
+        circle calc(var(--eye-size) * var(--pupil-scale)),
+        var(--pupil-color) 100%,
+        transparent 0
+      );
+      background-repeat: no-repeat;
+      animation:
+        eyeMove var(--duration) infinite,
+        eyeBlink var(--duration) infinite;
+    }
+    @keyframes eyeMove {
+      0%, 10%   { background-position: 0 0; }
+      13%, 40%  { background-position: calc(var(--travel) * -1) 0; }
+      43%, 70%  { background-position: var(--travel) 0; }
+      73%, 90%  { background-position: 0 var(--travel); }
+      93%, 100% { background-position: 0 0; }
+    }
+    @keyframes eyeBlink {
+      0%, 10%, 12%, 20%, 22%, 40%, 42%, 60%, 62%, 70%, 72%, 90%, 92%, 98%, 100% {
+        height: var(--eye-size);
+      }
+      11%, 21%, 41%, 61%, 71%, 91%, 99% {
+        height: calc(var(--eye-size) * var(--blink));
+      }
+    }
+  </style>
 </head>
 <body>
+
+<!-- ===== LOADING SCREEN ===== -->
+<div id="loader">
+  <div class="wandering-eyes" role="status" aria-label="Loading">
+    <div class="eyes-inner" aria-hidden="true">
+      <div class="eye"></div>
+      <div class="eye"></div>
+    </div>
+  </div>
+</div>
 
 <div class="overlay" id="overlay"></div>
 
@@ -43,7 +131,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">EXPLORER</div>
     <div class="sidebar-section">
-      <div class="section-title"><i data-lucide="folder-open"></i> nugas-ai</div>
+      <div class="section-title"><i data-lucide="folder-open"></i> NUGAS-AI</div>
       <div class="file-item" id="fileItem" hidden>
         <i data-lucide="file-text" class="file-icon"></i>
         <span class="file-name" id="fileName">-</span>
@@ -81,9 +169,8 @@
 
     <div class="sidebar-header">PENGATURAN</div>
 
-    <!-- MODEL AI — otomatis terisi dari /api/providers -->
     <div class="setting-item">
-      <label for="aiProvider">Model AI (ganti model ai yang dipilih jika tidak bisa)</label>
+      <label for="aiProvider">Model AI</label>
       <select id="aiProvider">
         <option>Memuat...</option>
       </select>
@@ -99,7 +186,7 @@
     </button>
 
     <div class="sidebar-footer">
-      Nugas.AI v1 - by <span class="footer-accent">al</span>
+      Created by <span class="footer-accent">al</span>
     </div>
   </aside>
 
@@ -121,7 +208,7 @@
         <h1>Nugas.AI</h1>
         <p class="welcome-sub">Buat kuis latihan dari file PDF/DOCX/TXT dengan AI</p>
         <div class="welcome-steps">
-          <div class="step"><span class="step-num">1</span> Buka Garis 3 Sebelah Kiri Atas, Lalu Upload file materi</div>
+          <div class="step"><span class="step-num">1</span> Buka Garis 3 Sebelah Kiri Atas, Lalu Upload file materi / soal</div>
           <div class="step"><span class="step-num">2</span> Klik <b>Generate Kuis</b></div>
           <div class="step"><span class="step-num">3</span> Kerjakan kuis</div>
         </div>
@@ -160,6 +247,33 @@
   </section>
 
 </div>
+
+<!-- ===== LOADING SCREEN SCRIPT ===== -->
+<script>
+  const loader = document.getElementById('loader');
+  const LOADER_DURATION = 2500;
+
+  function hideLoader() {
+    if (!loader) return;
+    setTimeout(() => {
+      loader.classList.add('hide');
+      setTimeout(() => loader.remove(), 1000);
+    }, LOADER_DURATION);
+  }
+
+  if (document.readyState === 'complete') {
+    hideLoader();
+  } else {
+    window.addEventListener('load', hideLoader);
+  }
+
+  setTimeout(() => {
+    if (loader && !loader.classList.contains('hide')) {
+      loader.classList.add('hide');
+      setTimeout(() => loader.remove(), 1000);
+    }
+  }, 5000);
+</script>
 
 <script src="script.js"></script>
 </body>
