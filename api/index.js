@@ -1,4 +1,4 @@
-// Nugas.AI - v11 (timeout 55s + JSON repair)
+// Nugas.AI - v11.1 (fix prompt bug)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -13,7 +13,6 @@ app.use(express.json({ limit: '10mb' }));
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
-// Daftar model
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
   'gemini-3.8-flash',
@@ -21,7 +20,6 @@ const GEMINI_MODELS = [
 ];
 const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
-// Batch size dikurangi jadi 10 biar output tidak kepotong
 const BATCH_SIZE = 10;
 
 function buildPrompt(materi, jumlahSoal) {
@@ -31,10 +29,10 @@ function buildPrompt(materi, jumlahSoal) {
     '1. JIKA file berisi SOAL + PILIHAN GANDA + JAWABAN:\n' +
     '   -> Ekstrak PERSIS seperti di file\n' +
     '   -> Jumlah opsi jawaban IKUTI file\n' +
-    '   -> WAJIB: Sertakan field "penjelasan" (1 kalimat saja, singkat)\n\n' +
+    '   -> WAJIB: Sertakan field "penjelasan" (1 kalimat singkat)\n\n' +
     '2. JIKA file berisi SOAL saja:\n' +
     '   -> Buatkan pilihan ganda A-E sendiri\n' +
-    '   -> WAJIB: Sertakan field "penjelasan" (1 kalimat saja)\n\n' +
+    '   -> WAJIB: Sertakan field "penjelasan" (1 kalimat)\n\n' +
     '3. JIKA file berisi MATERI saja:\n' +
     '   -> Buatkan TEPAT ' + jumlahSoal + ' SOAL. Tidak kurang, tidak lebih.\n' +
     '   -> Setiap soal WAJIB punya field "penjelasan" (1 kalimat singkat)\n\n' +
@@ -87,7 +85,7 @@ async function callGemini(prompt) {
             maxOutputTokens: 8192
           }
         })
-      }, 55000); // 55 detik
+      }, 55000);
 
       const rawText = await response.text();
       let data;
@@ -137,7 +135,7 @@ async function callGroq(prompt) {
           response_format: { type: 'json_object' },
           max_tokens: 8000
         })
-      }, 20000); // 20 detik
+      }, 20000);
 
       const rawText = await response.text();
       let data;
@@ -170,15 +168,101 @@ function getAvailableProviders() {
   const list = [];
   if (GEMINI_KEY) {
     GEMINI_MODELS.forEach(m => {
-      list.push({ id: m, label: m, provider: 'Gemini', fn: () => callGemini(prompt), hasKey: true });
+      list.push({
+        id: m,
+        label: m,
+        provider: 'Gemini',
+        fn: function(prompt) { return callGeminiForModel(prompt, m); },
+        hasKey: true
+      });
     });
   }
   if (GROQ_KEY) {
     GROQ_MODELS.forEach(m => {
-      list.push({ id: m, label: m, provider: 'Groq', fn: () => callGroq(prompt), hasKey: true });
+      list.push({
+        id: m,
+        label: m,
+        provider: 'Groq',
+        fn: function(prompt) { return callGroqForModel(prompt, m); },
+        hasKey: true
+      });
     });
   }
   return list;
+}
+
+// Fungsi helper: panggil Gemini untuk model spesifik
+async function callGeminiForModel(prompt, specificModel) {
+  if (!GEMINI_KEY) throw new Error('NO_KEY');
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + specificModel + ':generateContent?key=' + GEMINI_KEY;
+  console.log('[Gemini] ' + specificModel);
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.4,
+        responseMimeType: 'application/json',
+        maxOutputTokens: 8192
+      }
+    })
+  }, 55000);
+
+  const rawText = await response.text();
+  let data;
+  try { data = JSON.parse(rawText); } catch (e) { throw new Error(specificModel + ': non-JSON'); }
+
+  if (!response.ok) {
+    const errMsg = (data.error && data.error.message) || ('HTTP ' + response.status);
+    console.error('[Gemini] ' + response.status + ': ' + errMsg);
+    throw new Error(specificModel + ': ' + errMsg);
+  }
+
+  const text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
+  if (!text) throw new Error(specificModel + ': kosong');
+
+  console.log('[Gemini] OK: ' + specificModel);
+  return text;
+}
+
+// Fungsi helper: panggil Groq untuk model spesifik
+async function callGroqForModel(prompt, specificModel) {
+  if (!GROQ_KEY) throw new Error('NO_KEY');
+  console.log('[Groq] ' + specificModel);
+  const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + GROQ_KEY
+    },
+    body: JSON.stringify({
+      model: specificModel,
+      messages: [
+        { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas JSON valid. WAJIB patuhi jumlah soal PERSIS.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+      max_tokens: 8000
+    })
+  }, 20000);
+
+  const rawText = await response.text();
+  let data;
+  try { data = JSON.parse(rawText); } catch (e) { throw new Error(specificModel + ': non-JSON'); }
+
+  if (!response.ok) {
+    const errMsg = (data.error && data.error.message) || ('HTTP ' + response.status);
+    console.error('[Groq] ' + response.status + ': ' + errMsg);
+    throw new Error(specificModel + ': ' + errMsg);
+  }
+
+  const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (!text) throw new Error(specificModel + ': kosong');
+
+  console.log('[Groq] OK: ' + specificModel);
+  return text;
 }
 
 app.get('/api/providers', (req, res) => {
@@ -201,14 +285,13 @@ async function callAIWithProvider(prompt, modelId) {
 }
 
 // ==================================================
-// ====== JSON REPAIR (SOLUSI ERROR TERPOTONG) ======
+// ====== JSON REPAIR ======
 // ==================================================
 function parseAIResponse(raw) {
   try {
     return JSON.parse(raw);
   } catch (e) {
     console.warn('[JSON] Parse gagal, mencoba repair...');
-    // Bersihkan markdown
     let cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
     const start = cleaned.indexOf('{');
     if (start === -1) throw new Error('Format JSON tidak valid.');
@@ -216,11 +299,9 @@ function parseAIResponse(raw) {
 
     try { return JSON.parse(cleaned); } catch (e2) {}
 
-    // Cari object terakhir yang valid
     const lastValidBrace = cleaned.lastIndexOf('}');
     if (lastValidBrace > 0) {
       let repaired = cleaned.substring(0, lastValidBrace + 1);
-      // Coba tutup array dan object utama
       for (let i = 0; i < 5; i++) {
         try {
           return JSON.parse(repaired + ']}');
@@ -324,7 +405,7 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
 // ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
   const models = getAvailableProviders().map(p => p.id);
-  res.json({ status: 'ok', version: 'v11', models: models });
+  res.json({ status: 'ok', version: 'v11.1', models: models });
 });
 
 const PORT = process.env.PORT || 3000;
