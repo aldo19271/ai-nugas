@@ -1,4 +1,4 @@
-// Nugas.AI - v11.1 (fix prompt bug)
+// Nugas.AI - v12 (Groq sebagai default)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -65,133 +65,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-// ====== GEMINI ======
-async function callGemini(prompt) {
-  if (!GEMINI_KEY) throw new Error('NO_KEY');
-  let lastError = '';
-
-  for (const modelName of GEMINI_MODELS) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + GEMINI_KEY;
-    try {
-      console.log('[Gemini] ' + modelName);
-      const response = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.4,
-            responseMimeType: 'application/json',
-            maxOutputTokens: 8192
-          }
-        })
-      }, 55000);
-
-      const rawText = await response.text();
-      let data;
-      try { data = JSON.parse(rawText); } catch (e) { lastError = modelName + ': non-JSON'; continue; }
-
-      if (!response.ok) {
-        const errMsg = (data.error && data.error.message) || ('HTTP ' + response.status);
-        lastError = modelName + ': ' + errMsg;
-        console.error('[Gemini] ' + response.status + ': ' + errMsg);
-        continue;
-      }
-
-      const text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
-      if (!text) { lastError = modelName + ': kosong'; continue; }
-
-      console.log('[Gemini] OK: ' + modelName);
-      return text;
-    } catch (err) {
-      lastError = err.name === 'AbortError' ? (modelName + ': timeout') : (modelName + ': ' + err.message);
-      console.error('[Gemini] ' + lastError);
-    }
-  }
-  throw new Error('Gemini gagal: ' + lastError);
-}
-
-// ====== GROQ ======
-async function callGroq(prompt) {
-  if (!GROQ_KEY) throw new Error('NO_KEY');
-  let lastError = '';
-
-  for (const modelName of GROQ_MODELS) {
-    try {
-      console.log('[Groq] ' + modelName);
-      const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + GROQ_KEY
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: 'system', content: 'Kamu adalah AI pembuat soal yang hanya membalas JSON valid. WAJIB patuhi jumlah soal PERSIS.' },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.3,
-          response_format: { type: 'json_object' },
-          max_tokens: 8000
-        })
-      }, 20000);
-
-      const rawText = await response.text();
-      let data;
-      try { data = JSON.parse(rawText); } catch (e) { lastError = modelName + ': non-JSON'; continue; }
-
-      if (!response.ok) {
-        const errMsg = (data.error && data.error.message) || ('HTTP ' + response.status);
-        lastError = modelName + ': ' + errMsg;
-        console.error('[Groq] ' + response.status + ': ' + errMsg);
-        continue;
-      }
-
-      const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-      if (!text) { lastError = modelName + ': kosong'; continue; }
-
-      console.log('[Groq] OK: ' + modelName);
-      return text;
-    } catch (err) {
-      lastError = err.name === 'AbortError' ? (modelName + ': timeout') : (modelName + ': ' + err.message);
-      console.error('[Groq] ' + lastError);
-    }
-  }
-  throw new Error('Groq gagal: ' + lastError);
-}
-
-// ==================================================
-// ====== DAFTAR MODEL (AUTO-SYNC KE FRONTEND) ======
-// ==================================================
-function getAvailableProviders() {
-  const list = [];
-  if (GEMINI_KEY) {
-    GEMINI_MODELS.forEach(m => {
-      list.push({
-        id: m,
-        label: m,
-        provider: 'Gemini',
-        fn: function(prompt) { return callGeminiForModel(prompt, m); },
-        hasKey: true
-      });
-    });
-  }
-  if (GROQ_KEY) {
-    GROQ_MODELS.forEach(m => {
-      list.push({
-        id: m,
-        label: m,
-        provider: 'Groq',
-        fn: function(prompt) { return callGroqForModel(prompt, m); },
-        hasKey: true
-      });
-    });
-  }
-  return list;
-}
-
-// Fungsi helper: panggil Gemini untuk model spesifik
+// ====== GEMINI (untuk model spesifik) ======
 async function callGeminiForModel(prompt, specificModel) {
   if (!GEMINI_KEY) throw new Error('NO_KEY');
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + specificModel + ':generateContent?key=' + GEMINI_KEY;
@@ -226,7 +100,7 @@ async function callGeminiForModel(prompt, specificModel) {
   return text;
 }
 
-// Fungsi helper: panggil Groq untuk model spesifik
+// ====== GROQ (untuk model spesifik) ======
 async function callGroqForModel(prompt, specificModel) {
   if (!GROQ_KEY) throw new Error('NO_KEY');
   console.log('[Groq] ' + specificModel);
@@ -265,6 +139,40 @@ async function callGroqForModel(prompt, specificModel) {
   return text;
 }
 
+// ==================================================
+// ====== DAFTAR MODEL (GROQ DULUAN) ======
+// ==================================================
+function getAvailableProviders() {
+  const list = [];
+
+  // Groq duluan biar muncul & terpilih pertama
+  if (GROQ_KEY) {
+    GROQ_MODELS.forEach(m => {
+      list.push({
+        id: m,
+        label: m,
+        provider: 'Groq',
+        fn: function(prompt) { return callGroqForModel(prompt, m); },
+        hasKey: true
+      });
+    });
+  }
+
+  if (GEMINI_KEY) {
+    GEMINI_MODELS.forEach(m => {
+      list.push({
+        id: m,
+        label: m,
+        provider: 'Gemini',
+        fn: function(prompt) { return callGeminiForModel(prompt, m); },
+        hasKey: true
+      });
+    });
+  }
+
+  return list;
+}
+
 app.get('/api/providers', (req, res) => {
   const providers = getAvailableProviders().map(p => ({ id: p.id, label: p.label, provider: p.provider }));
   res.json({ providers });
@@ -284,9 +192,7 @@ async function callAIWithProvider(prompt, modelId) {
   return { text: result, provider: provider.id, providerName: provider.provider };
 }
 
-// ==================================================
 // ====== JSON REPAIR ======
-// ==================================================
 function parseAIResponse(raw) {
   try {
     return JSON.parse(raw);
@@ -387,7 +293,8 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
     const text = req.body.text;
     const jumlahSoalDiminta = parseInt(req.body.jumlahSoal) || 10;
-    const modelId = req.body.provider || 'gemini-3.5-flash';
+    // Default: Groq (kalau frontend tidak kirim provider)
+    const modelId = req.body.provider || 'openai/gpt-oss-120b';
 
     if (!text || text.trim().length < 30) return res.status(400).json({ error: 'Materi terlalu pendek.' });
     if (getAvailableProviders().length === 0) return res.status(500).json({ error: 'Tidak ada API key.' });
@@ -405,7 +312,7 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
 // ====== HEALTH CHECK ======
 app.get('/api/health', (req, res) => {
   const models = getAvailableProviders().map(p => p.id);
-  res.json({ status: 'ok', version: 'v11.1', models: models });
+  res.json({ status: 'ok', version: 'v12', models: models });
 });
 
 const PORT = process.env.PORT || 3000;
