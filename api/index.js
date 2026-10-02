@@ -88,7 +88,7 @@ async function callGemini(prompt, specificModel) {
             maxOutputTokens: 8192
           }
         })
-      }, 15000);
+      }, 55000);
 
       const rawText = await response.text();
       let data;
