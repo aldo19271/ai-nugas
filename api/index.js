@@ -14,7 +14,12 @@ const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
 // Daftar model per provider
-const GEMINI_MODELS = ['gemini-3.8-flash'];
+const GEMINI_MODELS = [
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+  'gemini-3.8-flash'
+];
 const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
 const BATCH_SIZE = 15;
