@@ -33,7 +33,7 @@ function refreshIcons() {
 }
 
 // ==================================================
-// ====== LOAD PROVIDERS DARI BACKEND ======
+// ====== LOAD MODEL DARI BACKEND ======
 // ==================================================
 async function loadProviders() {
   try {
@@ -42,8 +42,8 @@ async function loadProviders() {
     const data = await res.json();
 
     if (!data.providers || data.providers.length === 0) {
-      aiProvider.innerHTML = '<option value="">Tidak ada provider</option>';
-      log('Tidak ada provider AI yang tersedia.', 'err');
+      aiProvider.innerHTML = '<option value="">Tidak ada model</option>';
+      log('Tidak ada model AI yang tersedia.', 'err');
       return;
     }
 
@@ -51,20 +51,20 @@ async function loadProviders() {
     aiProvider.innerHTML = '';
     data.providers.forEach(p => {
       const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.label;
+      opt.value = p.id;           // ID = nama model
+      opt.textContent = p.label;  // Label = nama model
       aiProvider.appendChild(opt);
     });
 
-    // Default: pilih provider pertama (biasanya Gemini)
+    // Default: pilih model pertama
     aiProvider.value = data.providers[0].id;
 
-    log('Provider tersedia: ' + data.providers.map(p => p.label).join(', '), 'ok');
+    log('Model tersedia: ' + data.providers.map(p => p.label).join(', '), 'ok');
   } catch (err) {
     console.warn('Gagal load providers:', err);
     // Fallback: isi manual dengan default
-    aiProvider.innerHTML = '<option value="Gemini">Gemini</option>';
-    log('Gagal memuat daftar provider. Pakai default.', 'warn');
+    aiProvider.innerHTML = '<option value="gemini-3.8-flash">gemini-3.8-flash</option>';
+    log('Gagal memuat daftar model. Pakai default.', 'warn');
   }
 }
 
@@ -392,18 +392,18 @@ async function parseDOCX(file) {
 // ====== GENERATE ======
 btnGenerate.onclick = async () => {
   const jumlahSoal = parseInt($('jumlahSoal').value) || 10;
-  const provider = aiProvider.value || 'Gemini';
+  const modelId = aiProvider.value || 'gemini-3.8-flash';
 
   btnGenerate.disabled = true;
   btnGenerate.innerHTML = '<span class="spinner"></span> Memproses...';
   setStatus('AI menganalisis...', 'yellow');
-  log(`Diproses ke AI (${provider})...`, 'warn');
+  log(`Diproses ke model ${modelId}...`, 'warn');
 
   try {
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: state.materiText, jumlahSoal, provider })
+      body: JSON.stringify({ text: state.materiText, jumlahSoal, provider: modelId })
     });
 
     const rawText = await res.text();
@@ -425,7 +425,7 @@ btnGenerate.onclick = async () => {
     state.currentIndex = 0;
     state.jawabanUser = [];
 
-    log(`AI selesai via ${json.provider || provider}! Mode: ${json.data.mode}`, 'ok');
+    log(`AI selesai via ${json.provider || modelId}! Mode: ${json.data.mode}`, 'ok');
     log(`${json.data.soal.length} soal berhasil dibuat.`, 'ok');
 
     switchTab('kuis');
@@ -637,4 +637,4 @@ function escapeHtml(str) {
 log('Nugas.AI v1 siap digunakan.', 'ok');
 log('Menunggu file di-upload...', 'dim');
 refreshIcons();
-loadProviders(); // Load daftar provider dari backend
+loadProviders();
