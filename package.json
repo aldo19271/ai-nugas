@@ -1,7 +1,7 @@
 {
   "name": "nugas-ai",
   "version": "1.0.0",
-  "description": "Nugas.AI - Generate kuis dari materi PDF/DOCX/TXT dengan AI",
+  "description": "Nugas.AI - Generate kuis dari file PDF/DOCX/TXT dengan AI",
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js",
