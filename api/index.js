@@ -18,7 +18,7 @@ const GEMINI_MODELS = [
   'gemini-3.5-flash-lite',
   'gemini-flash-latest'
 ];
-const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound'];
 
 const BATCH_SIZE = 10;
 
