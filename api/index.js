@@ -15,8 +15,7 @@ const GROQ_KEY = (process.env.GROQ_API_KEY || '').trim();
 
 const GEMINI_MODELS = [
   'gemini-3.1-flash-lite',
-  'gemini-3.5-flash',
-  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
   'gemini-flash-latest'
 ];
 const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
